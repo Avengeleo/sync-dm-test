@@ -130,3 +130,10 @@ class DmApiClient(BaseClient):
 
     def recent_del(self, items):
         return self.call("/user/sticker/recent/del", {"items": items})
+
+    # ── 快捷回应 bar(最常用回应表情)──
+    def reaction_emoji_report(self, emoji):
+        return self.call("/user/reaction/emoji/report", {"emoji": emoji})
+
+    def reaction_emoji_top(self, limit=0):
+        return self.call("/user/reaction/emoji/top", {"limit": limit})
