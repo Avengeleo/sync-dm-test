@@ -73,6 +73,14 @@ class DmApiClient(BaseClient):
             "token": self.token,         # 会话 token
             "Content-Type": "application/json",
         })
+        for hk, hv in headers.items():  # HTTP 头须 ASCII;给清晰错误而非 latin-1 崩溃
+            try:
+                str(hv).encode("latin-1")
+            except UnicodeEncodeError:
+                raise ValueError(
+                    f"请求头 {hk}={hv!r} 含非 ASCII 字符——多半是 .env 里某个 DM_API_* 值误带了注释/中文。"
+                    f"检查 DM_API_WIPS / DM_API_TOKEN 是否只填了纯值、行尾没跟 # 注释。"
+                )
         url = f"{self.base_url}{self.prefix}{subpath}?app_id={self.app_id}&sign={sign}"
         resp = self.session.post(url, json=(body or {}), headers=headers, timeout=self.timeout)
         return self._wrap(resp)

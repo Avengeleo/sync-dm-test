@@ -17,16 +17,24 @@ import pytest
 from dm_api_test.client import DmApiClient
 
 
+def _clean(key):
+    """读环境值:去首尾空白;若误把行内注释(# 开头)当成了值,视为空。"""
+    v = os.environ.get(key, "").strip()
+    if v.startswith("#"):
+        return ""
+    return v
+
+
 def _cfg():
     return {
-        "base_url": os.environ.get("DM_API_BASE_URL", ""),
-        "prefix": os.environ.get("DM_API_PREFIX", "/api/h5"),
-        "app_id": os.environ.get("DM_API_APP_ID", ""),
-        "app_secret": os.environ.get("DM_API_APP_SECRET", ""),
-        "wips": os.environ.get("DM_API_WIPS", ""),
-        "token": os.environ.get("DM_API_TOKEN", ""),
-        "client_type": os.environ.get("DM_API_CLIENT_TYPE", ""),
-        "timeout": int(os.environ.get("BI_HTTP_TIMEOUT", "15")),
+        "base_url": _clean("DM_API_BASE_URL"),
+        "prefix": _clean("DM_API_PREFIX") or "/api/h5",
+        "app_id": _clean("DM_API_APP_ID"),
+        "app_secret": _clean("DM_API_APP_SECRET"),
+        "wips": _clean("DM_API_WIPS"),
+        "token": _clean("DM_API_TOKEN"),
+        "client_type": _clean("DM_API_CLIENT_TYPE"),
+        "timeout": int(_clean("BI_HTTP_TIMEOUT") or "15"),
     }
 
 
