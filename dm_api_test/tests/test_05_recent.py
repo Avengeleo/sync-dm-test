@@ -1,6 +1,6 @@
 """最近使用(贴图/GIF 服务端化;每次发送 upsert use_time、超上限淘汰最旧)。
 
-契约(读 handler_sticker.go/stickerDb.go 核实):
+契约(读 handler_sticker.go/stickerDb.go 核实;emoji=fav_type3,key 存 img_url,上限14):
   report: {fav_type(1贴图/2GIF),img_url,pack_id(贴图必填/GIF空),...} → upsert;贴图上限10/GIF20,超量淘汰最旧
   list:   {fav_type} → {list:[{favType,packId,imgUrl,...,useTime}]},最近在前
   del:    {items:[{fav_type,pack_id,img_url}]} 批量
@@ -63,6 +63,16 @@ def test_gif_recent_no_pack_id(dm_client, recent_cleaner):
     recent_cleaner(2, img, "")
     dm_client.recent_report(2, img, pack_id="").expect_ok()
     assert img in _urls(dm_client.recent_list(2).expect_ok()), "GIF 最近使用应含该图"
+
+
+@pytest.mark.write
+def test_emoji_recent(dm_client, recent_cleaner):
+    # emoji 最近使用(fav_type=3):无 URL/pack_id,emoji key 放 img_url 位;上限 14
+    key = "\U0001F602"  # 😂
+    recent_cleaner(3, key, "")
+    dm_client.recent_report(3, key, pack_id="").expect_ok()
+    urls = _urls(dm_client.recent_list(3).expect_ok())
+    assert key in urls, "emoji 最近使用应含该表情 key"
 
 
 def test_report_fav_type_zero_rejected(dm_client):
