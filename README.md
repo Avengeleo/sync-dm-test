@@ -19,10 +19,10 @@ sync-dm-test/                 ← 打开这个为 PyCharm 项目根
 │   ├── conftest.py           #   bi fixtures(client / draft_pack / 载荷工厂)
 │   ├── check_conn.py         #   连通+登录自检
 │   └── tests/                #   test_00_auth … test_06_tray_icon
-└── dm_api_test/              # 🚧 dm-api 套件脚手架(接入时补鉴权+接口)
-    ├── client.py             #   DmApiClient(继承 BaseClient,含 TODO)
-    ├── conftest.py
-    └── tests/test_smoke.py   #   占位用例(缺配置即 skip)
+└── dm_api_test/              # ✅ dm-api 套件(16 用例:聊天设置/我的最爱/贴图读)
+    ├── client.py             #   DmApiClient:三层鉴权(AES旁路 Encversion + 签名 + token)
+    ├── conftest.py           #   dm fixtures(dm_client / fav_cleaner)
+    └── tests/                #   test_00_smoke(鉴权链路)… test_03_sticker_read
 ```
 
 ## 怎么加一个新服务套件(如 dm-im)
@@ -49,10 +49,15 @@ pytest -m "not s3"          # 跳过依赖 S3 的用例
 ## 配置
 
 复制 `.env.example` 为 `.env`,按前缀填对应服务:
-- bi:`BI_BASE_URL`(云主机上填 `http://127.0.0.1:8094`)、`BI_USERNAME`、`BI_PASSWORD`;
-- dm-api:`DM_API_BASE_URL`、`DM_API_TOKEN`(接入时补)。
+- bi:`BI_BASE_URL`、`BI_USERNAME`(手机号)、`BI_PASSWORD`(MD5,取浏览器 payload 值);
+- dm-api:`DM_API_BASE_URL`、`DM_API_APP_ID`/`DM_API_APP_SECRET`(查库 `sys_apps`)、`DM_API_WIPS`(Encversion 旁路值,跳过 AES)、`DM_API_TOKEN`(live 抓)。
 
 未配置的服务对应套件会整体 **skip**,不报错。
+
+**dm-api 三层鉴权说明**:用户接口在网关串了 AES 加密 + 签名 + token 三层。客户端的对付方式:
+① 带 `Encversion=<WIPs值>` 头旁路 AES(body 走明文);② 每请求生成 nonce,把 `app_id+sign`
+放 query、业务参数放 JSON body,`sign=UPPER(MD5(MD5(app_id)+MD5(appSecret+nonce)))`;③ 带 `token` 头。
+先跑 `test_00_smoke`——它按返回 code 告诉你哪层没过(1020/1021=AES、1006/1007=签名、401=token)。
 
 ## markers
 

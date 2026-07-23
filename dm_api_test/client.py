@@ -1,33 +1,93 @@
-"""dm-api(sync-dm-api 网关)客户端 —— 脚手架,接入时补全。
+"""dm-api(sync-dm-api 网关)客户端。
 
-已核实:dm-api 网关响应信封同为 {code, msg, data, time}(HTTP 恒 200,码在 body.code),
-所以直接复用 common.BaseClient;与 bi 的差别只有 base_url、鉴权、接口路径。
+dm-api 用户接口在网关串了三层,自测逐一对付(全部读源码核实):
+1) AES 层(aes.AesDecrypt):默认要 AES 加密 body。**旁路**:带 header `Encversion=<WIPs值>`
+   则 aes.go:32 直接 ctx.Next() 跳过加解密,body 走明文。→ 我们走旁路,免复现 AES。
+2) 签名层(verify.VerifySign):要 header `Content-ETag`(nonce)+ query 里 app_id + sign。
+   sign = UPPER( MD5( MD5(除sign外所有Form值按key字典序拼接) + MD5(appSecret + nonce) ) )。
+   旁路 AES 时 Form 只来自 query,故我们只把 app_id+sign 放 query,业务参数放 JSON body
+   (VerifySign 只校验 Form=query,不看 body;handler 用 ShouldBind 读 JSON body)。
+   → 签名实际只覆盖 app_id,算式简化为 UPPER(MD5(MD5(app_id) + MD5(appSecret+nonce)))。
+3) token 层(verify.VerifyToken):header `token=<会话token>`(identify-srv 发的 32 位串,非 JWT)。
 
-待接入时要确定的两点(TODO):
-1. 鉴权:dm-api 走用户 JWT,user_id 由网关中间件从 token 解出。
-   要么走登录接口换 token(在 login() 里实现),要么测试环境直接注入一个已知 token。
-   放进哪个 header 也要核实(常见 Authorization: Bearer,以网关中间件为准)。
-2. 接口路径:如贴图客户端接口 /sticker/pack_list、我的最爱 /sticker/my_fav/*、
-   聊天设置 /user/switch/{list,set} 等,按 sync-dm-api 路由补方法。
+路径:{base}{prefix}/user/<子路径>,prefix 默认 /api/v2(APP 网关);H5 用 /api/h5。
+响应信封同 bi:{code,msg,data,time},HTTP 恒 200,业务码看 code。
 """
 
-from common.http_client import BaseClient
+import hashlib
+import uuid
+
+from common.http_client import BaseClient, Envelope
+
+
+def _md5(s):
+    return hashlib.md5(s.encode("utf-8")).hexdigest()
 
 
 class DmApiClient(BaseClient):
-    # TODO: 核实真实鉴权头名(占位)
-    AUTH_HEADER = "Authorization"
+    def __init__(self, base_url, app_id, app_secret, token, wips,
+                 prefix="/api/v2", client_type="", timeout=15):
+        super().__init__(base_url, timeout=timeout)
+        self.app_id = str(app_id)
+        self.app_secret = app_secret
+        self.token = token
+        self.wips = wips           # Encversion 旁路值(跳过 AES)
+        self.prefix = prefix.rstrip("/")
+        self.client_type = client_type
 
-    def set_token(self, token):
-        # TODO: 若为 Bearer,这里拼 "Bearer " + token
-        self.default_headers[self.AUTH_HEADER] = token
+    def _sign(self, query_no_sign, nonce):
+        # VerifySign:除 sign 外所有 Form 值按 key 字典序拼接
+        keys = sorted(query_no_sign.keys())
+        concat = "".join(str(query_no_sign[k]) for k in keys)
+        secret = _md5(self.app_secret + nonce)
+        return _md5(_md5(concat) + secret).upper()
 
-    # ── 示例:填了鉴权后即可用 ──
+    def call(self, subpath, body=None):
+        """打一个 dm-api 用户接口。subpath 如 '/user/switch/list'。body=业务 JSON。"""
+        nonce = uuid.uuid4().hex
+        query = {"app_id": self.app_id}
+        sign = self._sign(query, nonce)
+        headers = {
+            "Encversion": self.wips,     # 旁路 AES
+            "Content-ETag": nonce,       # 签名 nonce
+            "token": self.token,         # 会话 token
+            "Content-Type": "application/json",
+        }
+        if self.client_type:
+            headers["Client-type"] = self.client_type
+        url = f"{self.base_url}{self.prefix}{subpath}?app_id={self.app_id}&sign={sign}"
+        resp = self.session.post(url, json=(body or {}), headers=headers, timeout=self.timeout)
+        return self._wrap(resp)
+
+    # ── 聊天设置 ──
+    def switch_list(self):
+        return self.call("/user/switch/list")
+
+    def switch_set(self, alias_field, setting_value):
+        # setting_value 必须是字符串
+        return self.call("/user/switch/set",
+                         {"alias_field": alias_field, "setting_value": str(setting_value)})
+
+    # ── 贴图读 ──
     def sticker_pack_list(self, version=0):
-        return self.post("/sticker/pack_list", json={"version": version})
+        return self.call("/user/sticker/pack_list", {"version": version})
 
+    def sticker_item_list(self, pack_id):
+        return self.call("/user/sticker/item_list", {"pack_id": pack_id})
+
+    def my_pack_list(self):
+        return self.call("/user/sticker/my_pack/list")
+
+    # ── 我的最爱 ──
     def my_fav_list(self, fav_type=0):
-        return self.post("/sticker/my_fav/list", json={"fav_type": fav_type})
+        return self.call("/user/sticker/my_fav/list", {"fav_type": fav_type})
 
-    def user_switch_list(self):
-        return self.post("/user/switch/list", json={})
+    def my_fav_add(self, fav_type, img_url, pack_id="", file_name="", width=0, height=0):
+        return self.call("/user/sticker/my_fav/add", {
+            "fav_type": fav_type, "img_url": img_url, "pack_id": pack_id,
+            "file_name": file_name, "width": width, "height": height,
+        })
+
+    def my_fav_del(self, items):
+        # items = [{"fav_type":1,"pack_id":"","img_url":"..."}]
+        return self.call("/user/sticker/my_fav/del", {"items": items})
