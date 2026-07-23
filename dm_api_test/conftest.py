@@ -75,3 +75,19 @@ def fav_cleaner(dm_client):
             dm_client.my_fav_del(added)
         except Exception:
             pass
+
+
+@pytest.fixture
+def recent_cleaner(dm_client):
+    """记录本用例上报的最近使用,结束时批量删除。"""
+    added = []
+
+    def _track(fav_type, img_url, pack_id=""):
+        added.append({"fav_type": fav_type, "pack_id": pack_id, "img_url": img_url})
+
+    yield _track
+    if added:
+        try:
+            dm_client.recent_del(added)
+        except Exception:
+            pass

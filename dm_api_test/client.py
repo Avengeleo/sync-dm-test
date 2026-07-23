@@ -117,3 +117,16 @@ class DmApiClient(BaseClient):
     def my_fav_del(self, items):
         # items = [{"fav_type":1,"pack_id":"","img_url":"..."}]
         return self.call("/user/sticker/my_fav/del", {"items": items})
+
+    # ── 最近使用 ──
+    def recent_report(self, fav_type, img_url, pack_id="", file_name="", width=0, height=0):
+        return self.call("/user/sticker/recent/report", {
+            "fav_type": fav_type, "img_url": img_url, "pack_id": pack_id,
+            "file_name": file_name, "width": width, "height": height,
+        })
+
+    def recent_list(self, fav_type):
+        return self.call("/user/sticker/recent/list", {"fav_type": fav_type})
+
+    def recent_del(self, items):
+        return self.call("/user/sticker/recent/del", {"items": items})
