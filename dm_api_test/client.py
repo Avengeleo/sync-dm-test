@@ -25,15 +25,34 @@ def _md5(s):
 
 
 class DmApiClient(BaseClient):
+    # 真实 App(H5)请求头,防止其它中间件按这些头做校验(值取自抓包,非密钥)
+    DEFAULT_APP_HEADERS = {
+        "app_version": "1.8.2",
+        "brand-id": "1",
+        "channel-id": "1",
+        "client-type": "2",
+        "device_brand": "web",
+        "device_info": "Chrome/146.0.0.0",
+        "device_number": "146.0.0.0",
+        "device_token": "web",
+        "lang": "cn",
+        "mch-id": "10001",
+        "x-app-type": "h5",
+    }
+
     def __init__(self, base_url, app_id, app_secret, token, wips,
-                 prefix="/api/v2", client_type="", timeout=15):
+                 prefix="/api/h5", client_type="", timeout=15, app_headers=None):
         super().__init__(base_url, timeout=timeout)
         self.app_id = str(app_id)
         self.app_secret = app_secret
         self.token = token
         self.wips = wips           # Encversion 旁路值(跳过 AES)
         self.prefix = prefix.rstrip("/")
-        self.client_type = client_type
+        self.app_headers = dict(self.DEFAULT_APP_HEADERS)
+        if client_type:
+            self.app_headers["client-type"] = client_type
+        if app_headers:
+            self.app_headers.update(app_headers)
 
     def _sign(self, query_no_sign, nonce):
         # VerifySign:除 sign 外所有 Form 值按 key 字典序拼接
@@ -47,14 +66,13 @@ class DmApiClient(BaseClient):
         nonce = uuid.uuid4().hex
         query = {"app_id": self.app_id}
         sign = self._sign(query, nonce)
-        headers = {
-            "Encversion": self.wips,     # 旁路 AES
+        headers = dict(self.app_headers)
+        headers.update({
+            "Encversion": self.wips,     # 旁路 AES(=WIPs 值则 aes.go:32 跳过加解密)
             "Content-ETag": nonce,       # 签名 nonce
             "token": self.token,         # 会话 token
             "Content-Type": "application/json",
-        }
-        if self.client_type:
-            headers["Client-type"] = self.client_type
+        })
         url = f"{self.base_url}{self.prefix}{subpath}?app_id={self.app_id}&sign={sign}"
         resp = self.session.post(url, json=(body or {}), headers=headers, timeout=self.timeout)
         return self._wrap(resp)

@@ -20,7 +20,7 @@ from dm_api_test.client import DmApiClient
 def _cfg():
     return {
         "base_url": os.environ.get("DM_API_BASE_URL", ""),
-        "prefix": os.environ.get("DM_API_PREFIX", "/api/v2"),
+        "prefix": os.environ.get("DM_API_PREFIX", "/api/h5"),
         "app_id": os.environ.get("DM_API_APP_ID", ""),
         "app_secret": os.environ.get("DM_API_APP_SECRET", ""),
         "wips": os.environ.get("DM_API_WIPS", ""),
