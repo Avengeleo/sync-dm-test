@@ -4,7 +4,7 @@
   CMLogin: sUserId=1(int64) sLoginToken=2(string) sDeviceToken=3(string) clientType=8(uint32)
   MESReactionContent: emoji=1(string) action=2(uint32)
   MESChat: sToId=1(int64) sMsgId=3(string) sContent=7(bytes) parentMsgId=12(string)  (sFromId=2 由网关覆盖,不发)
-  解码 CMLoginAck: nErr=2 ;  MESChatAck: sMsgId=2(string) errcode=4
+  解码 CMLoginAck: nErr=2;单聊 MESChatAck errcode=4;群 GroupChatAck/超级群 RadioChatAck errcode=5
 """
 
 
@@ -82,3 +82,13 @@ def mes_reaction_content(emoji, action=0):
 
 def mes_chat_reaction(to_id, msg_id, parent_msg_id, content):
     return _fv(1, int(to_id)) + _fs(3, msg_id) + _fb(7, content) + _fs(12, parent_msg_id)
+
+
+def mes_grp_chat_reaction(grp_id, msg_id, parent_msg_id, content):
+    # MESGrpChat: sGrpId=1(int64) sMsgId=5(string) sContent=8(bytes) parentMsgId=13(string)
+    return _fv(1, int(grp_id)) + _fs(5, msg_id) + _fb(8, content) + _fs(13, parent_msg_id)
+
+
+def radio_chat_reaction(radio_id, msg_id, parent_msg_id, content):
+    # RadioChat: sRadioId=2(int64) sMsgId=3(string) sContent=6(bytes) parentMsgId=13(string)
+    return _fv(2, int(radio_id)) + _fs(3, msg_id) + _fb(6, content) + _fs(13, parent_msg_id)

@@ -17,6 +17,10 @@ HEARTBEAT = 0x0001
 REACTION_UPLINK = 0x122A          # 单聊回应上行(收方副本;走好友校验,除非自反应)
 REACTION_OPPOSITE = 0x122B        # 单聊回应上行(对端副本;恒跳好友校验)
 REACTION_ACK = 0x122C
+GROUP_REACTION_UPLINK = 0x2312    # 群回应上行
+GROUP_REACTION_ACK = 0x2313
+RADIO_REACTION_UPLINK = 0x3211    # 超级群回应上行
+RADIO_REACTION_ACK = 0x3212
 NON_ERR = 0x8000                  # 成功码
 
 
@@ -79,3 +83,23 @@ class ImWsClient:
             "ack_msg_id": ack_mid.decode() if isinstance(ack_mid, bytes) else "",
             "sent_msg_id": msg_id,
         }
+
+    def send_group_reaction(self, group_id, parent_msg_id=None, emoji="👍", action=0):
+        """群心情回应(需登录用户确为该群成员)。返回 {errcode, sent_msg_id}。"""
+        parent_msg_id = parent_msg_id or uuid.uuid4().hex
+        msg_id = uuid.uuid4().hex
+        content = proto_min.mes_reaction_content(emoji, action)
+        body = proto_min.mes_grp_chat_reaction(group_id, msg_id, parent_msg_id, content)
+        self._send(GROUP_REACTION_UPLINK, body)
+        ack = proto_min.decode(self._recv_until(GROUP_REACTION_ACK))
+        return {"errcode": ack.get(5, 0), "sent_msg_id": msg_id}  # GroupChatAck.errcode=5
+
+    def send_channel_reaction(self, radio_id, parent_msg_id=None, emoji="👍", action=0):
+        """超级群心情回应(需登录用户在该频道有权限)。返回 {errcode, sent_msg_id}。"""
+        parent_msg_id = parent_msg_id or uuid.uuid4().hex
+        msg_id = uuid.uuid4().hex
+        content = proto_min.mes_reaction_content(emoji, action)
+        body = proto_min.radio_chat_reaction(radio_id, msg_id, parent_msg_id, content)
+        self._send(RADIO_REACTION_UPLINK, body)
+        ack = proto_min.decode(self._recv_until(RADIO_REACTION_ACK))
+        return {"errcode": ack.get(5, 0), "sent_msg_id": msg_id}  # RadioChatAck.errcode=5

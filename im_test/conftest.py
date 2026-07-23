@@ -25,6 +25,8 @@ def _cfg():
         "user_id": _clean("IM_USER_ID"),
         "token": _clean("IM_TOKEN"),
         "client_type": int(_clean("IM_CLIENT_TYPE") or "2"),
+        "group_id": _clean("IM_GROUP_ID"),      # 你所在的一个群 id(群回应用,可选)
+        "channel_id": _clean("IM_CHANNEL_ID"),  # 你所在的一个超级群/频道 id(超级群回应用,可选)
         "timeout": int(_clean("IM_TIMEOUT") or "10"),
     }
 
