@@ -1,0 +1,15 @@
+# 密钥/本地配置
+.env
+
+# Python 运行产物
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# 构建/离线产物(可再生,不入库):虚拟环境、离线 wheel、Python 安装包、打包 zip
+offline_wheels/
+*.whl
+*.zip
+*.exe
