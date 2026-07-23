@@ -23,6 +23,10 @@ sync-dm-test/                 ← 打开这个为 PyCharm 项目根
     ├── client.py             #   DmApiClient:三层鉴权(AES旁路 Encversion + 签名 + token)
     ├── conftest.py           #   dm fixtures(dm_client / fav_cleaner)
     └── tests/                #   test_00_smoke(鉴权链路)… test_03_sticker_read
+└── im_test/                 # ✅ dm-im 长连接套件(心情回应,WebSocket)
+    ├── frame.py / proto_min.py  #   帧编解码 + 极简 protobuf(不引 protoc)
+    ├── client.py             #   ImWsClient:连WS+CM_LOGIN+发回应+收ACK(自反应免好友)
+    └── tests/                #   test_00_login … test_01_reaction
 ```
 
 ## 怎么加一个新服务套件(如 dm-im)
@@ -39,6 +43,7 @@ sync-dm-test/                 ← 打开这个为 PyCharm 项目根
 pytest                      # 全部套件
 pytest -m bi                # 只跑 bi 套件(靠目录自动标记)
 pytest -m dm_api            # 只跑 dm-api 套件
+pytest -m im                # 只跑 dm-im 心情回应(WebSocket,需 IM_* 配置)
 pytest bi_api_test/         # 也可直接按目录跑
 pytest -m "bi and not write"   # bi 的只读用例(不写库,最安全)
 pytest -m "not s3"          # 跳过依赖 S3 的用例
