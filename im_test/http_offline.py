@@ -49,3 +49,19 @@ class OfflineHttpClient:
         if r.status_code != 200:
             return r.status_code, []
         return 200, proto_min.parse_chnn_session_resp(r.content)
+
+    def group_pull(self, group_id, client_type="0", limit=50, direct=-1):
+        """按游标拉群离线消息(默认不排除回应;按 clientType 的 Pulled=0 过滤)。返回 (code, [OfflineGroupMsg dict])。"""
+        body = proto_min.get_group_msg_req(group_id, client_type=client_type, direct=direct, limit=limit)
+        r = self._post("/offline/v1/group/pull", body)
+        if r.status_code != 200:
+            return r.status_code, []
+        return 200, proto_min.parse_group_msg_resp(r.content)
+
+    def channel_offline_messages(self, chnn_id, count=50, direction=1):
+        """按游标拉超级群离线消息(服务端硬过滤 Normal,回应拉不到)。direction=1+空base→最新N条。返回 (code, [ChnnChat dict])。"""
+        body = proto_min.pull_chnn_message_req(self.user_id, chnn_id, direction=direction, count=count)
+        r = self._post("/channel/v1/offlineMessages", body)
+        if r.status_code != 200:
+            return r.status_code, []
+        return 200, proto_min.parse_chnn_message_resp(r.content)

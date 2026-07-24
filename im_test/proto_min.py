@@ -237,3 +237,52 @@ def parse_chnn_session_resp(body):
             "last_event": last.get(17, 0),
         })
     return out
+
+
+# ── 群消息拉取(游标端点 /offline/v1/group/pull;回应能拉到,默认不排除)──
+def get_group_msg_req(group_id, client_type="0", msg_index="", direct=-1, limit=50):
+    # GetGroupMsgReq: userId=1(网关ctx) groupId=2 msgIndex=3(str,空=全部未拉) direct=4(int32 1向后/-1向前=排序)
+    #                 limit=5(int32) clientType=6(str,决定按 app/pc/web Pulled=0 过滤)
+    out = _fv(2, int(group_id))
+    if msg_index:
+        out += _fs(3, msg_index)
+    return out + _fv(4, int(direct)) + _fv(5, int(limit)) + _fs(6, str(client_type))
+
+
+def parse_group_msg_resp(body):
+    """GetGroupMsgResp: data=2(repeated OfflineGroupMsg)。
+    OfflineGroupMsg: cmdId=1 sMsgData=2 sMsgId=3 sFromId=4 sGroupId=5 parentMsgId=8 isRead=9。"""
+    out = []
+    for raw in decode_all(body).get(2, []):
+        f = decode(raw)
+        out.append({
+            "cmd_id": f.get(1, 0), "data": f.get(2, b""), "msg_id": _s(f.get(3, b"")),
+            "from_id": f.get(4, 0), "group_id": f.get(5, 0),
+            "parent_msg_id": _s(f.get(8, b"")), "is_read": f.get(9, 0),
+        })
+    return out
+
+
+# ── 超级群消息拉取(游标端点 /channel/v1/offlineMessages;服务端硬过滤 Normal,回应拉不到)──
+def pull_chnn_message_req(user_id, chnn_id, base_index="", direction=1, count=50, is_contain=1, client_type=0):
+    # PullChnnMessageReq: sUserId=1(body,非ctx) lsPull=2(repeated PullChnnMessageInfo) clientType=3(uint32)
+    # PullChnnMessageInfo: sChnnId=1 sBaseIndex=2(空+UP=1→最新N条) uDirection=3(1向前/0向后) uCount=4 uIsContain=5
+    info = _fv(1, int(chnn_id))
+    if base_index:
+        info += _fs(2, base_index)
+    info += _fv(3, int(direction)) + _fv(4, int(count)) + _fv(5, int(is_contain))
+    return _fv(1, int(user_id)) + _fb(2, info) + _fv(3, int(client_type))
+
+
+def parse_chnn_message_resp(body):
+    """PullChnnMessageRsp: lsMessage=2(repeated ChnnChat)。
+    ChnnChat: sFromId=1 sChnnId=2 sMsgId=3 sContent=6 sIndex=8 parentMsgId=13 eventType=17(0普通/2回应)。"""
+    out = []
+    for raw in decode_all(body).get(2, []):
+        f = decode(raw)
+        out.append({
+            "from_id": f.get(1, 0), "chnn_id": f.get(2, 0), "msg_id": _s(f.get(3, b"")),
+            "content": f.get(6, b""), "index": _s(f.get(8, b"")),
+            "parent_msg_id": _s(f.get(13, b"")), "event_type": f.get(17, 0),
+        })
+    return out
