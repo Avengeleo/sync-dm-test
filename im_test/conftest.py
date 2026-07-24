@@ -30,6 +30,8 @@ def _cfg():
         "group_id": _clean("IM_GROUP_ID"),      # 你所在的一个群 id(群回应/群投递用,可选)
         "channel_id": _clean("IM_CHANNEL_ID"),  # 你所在的一个超级群/频道 id(超级群回应/投递用,可选)
         "http_base": _clean("IM_HTTP_BASE_URL"),  # http-gateway 域名(离线拉取用,如 https://im-http.ramon2025.com:3801)
+        "user_id2": _clean("IM_USER_ID2"),  # 第二账号 B(群/超级群离线作离线收方)
+        "token2": _clean("IM_TOKEN2"),
         "timeout": int(_clean("IM_TIMEOUT") or "10"),
         "http_timeout": int(_clean("IM_HTTP_TIMEOUT") or "15"),  # 离线 HTTP 单次超时(冷调用/mongo 慢可能偏慢)
     }
@@ -96,3 +98,16 @@ def offline_http(im_config):
     if not base:
         pytest.skip("未配置 IM_HTTP_BASE_URL,跳过离线拉取用例")
     return OfflineHttpClient(base, im_config["token"], im_config["user_id"], im_config["http_timeout"])
+
+
+@pytest.fixture
+def offline_http_b(im_config):
+    """第二账号 B 的离线 HTTP 客户端(群/超级群离线:A 发、B 作离线收方拉取)。
+    未配 IM_HTTP_BASE_URL 或 IM_USER_ID2/IM_TOKEN2 则 skip。"""
+    base = im_config.get("http_base")
+    if not base:
+        pytest.skip("未配置 IM_HTTP_BASE_URL,跳过离线拉取用例")
+    uid2, tok2 = im_config.get("user_id2"), im_config.get("token2")
+    if not uid2 or not tok2:
+        pytest.skip("未配置 IM_USER_ID2 / IM_TOKEN2(第二账号 B),跳过群/超级群离线用例")
+    return OfflineHttpClient(base, tok2, uid2, im_config["http_timeout"])

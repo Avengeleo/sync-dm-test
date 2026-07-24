@@ -188,3 +188,52 @@ def parse_offline_resp(body):
             "parent_msg_id": _s(f.get(8, b"")), "is_read": f.get(9, 0),
         })
     return out
+
+
+# ── 群离线:有未读会话(会话内联 msgList,普通消息;字段号读 groupsrv/groupsrv.proto)──
+def offline_group_session_req(client_type="0", size=50):
+    # OfflineGroupSessionReq: userId=1(网关ctx注入,不发) clientType=2(string!) size=3(int64)
+    return _fs(2, str(client_type)) + _fv(3, int(size))
+
+
+def parse_group_session_resp(body):
+    """OfflineGroupSessionResp: sessionList=2(repeated OfflineGroupSession)。
+    OfflineGroupSession: groupId=1 unreadCount=2 msgList=3(repeated OfflineGroupMsg)。
+    OfflineGroupMsg: cmdId=1 sMsgData=2 sMsgId=3 sFromId=4 sGroupId=5 parentMsgId=8。
+    展平所有会话的 msgList,返回 [{group_id,unread,cmd_id,msg_id,from_id,parent_msg_id,data}]。"""
+    out = []
+    for s in decode_all(body).get(2, []):
+        sf = decode_all(s)
+        gid = sf.get(1, [0])[0]
+        unread = sf.get(2, [0])[0]
+        for raw in sf.get(3, []):
+            m = decode(raw)
+            out.append({
+                "group_id": gid, "unread": unread,
+                "cmd_id": m.get(1, 0), "data": m.get(2, b""), "msg_id": _s(m.get(3, b"")),
+                "from_id": m.get(4, 0), "parent_msg_id": _s(m.get(8, b"")),
+            })
+    return out
+
+
+# ── 超级群离线:会话列表(每会话带 last=最新一条 + uUnread;普通消息)──
+def pull_chnn_session_req(user_id, chnn_id, client_type=0):
+    # PullChnnSessionReq: sUserId=1(body,非ctx) lsChnnInfo=2(repeated PullChnnInfo{sChnnId=1}) clientType=3(uint32)
+    info = _fv(1, int(chnn_id))
+    return _fv(1, int(user_id)) + _fb(2, info) + _fv(3, int(client_type))
+
+
+def parse_chnn_session_resp(body):
+    """PullChnnSessionRsp: lsSession=2(repeated SessionInfo)。
+    SessionInfo: sChnnId=1 sReadIndex=2 uUnread=3 last=4(ChnnChat) 。
+    ChnnChat: sMsgId=3 sIndex=8 eventType=17。返回 [{chnn_id,unread,last_msg_id,last_index,last_event}]。"""
+    out = []
+    for s in decode_all(body).get(2, []):
+        sf = decode(s)
+        last = decode(sf.get(4, b"")) if sf.get(4) else {}
+        out.append({
+            "chnn_id": sf.get(1, 0), "unread": sf.get(3, 0),
+            "last_msg_id": _s(last.get(3, b"")), "last_index": _s(last.get(8, b"")),
+            "last_event": last.get(17, 0),
+        })
+    return out

@@ -33,3 +33,19 @@ class OfflineHttpClient:
         if r.status_code != 200:
             return r.status_code, []
         return 200, proto_min.parse_offline_resp(r.content)
+
+    def group_session(self, client_type="0", size=50):
+        """拉「有未读消息的群会话」(会话内联 msgList,普通消息)。返回 (code, [展平的群消息 dict])。"""
+        body = proto_min.offline_group_session_req(client_type=client_type, size=size)
+        r = self._post("/offline/v1/group/session", body)
+        if r.status_code != 200:
+            return r.status_code, []
+        return 200, proto_min.parse_group_session_resp(r.content)
+
+    def channel_sessions(self, chnn_id, client_type=0):
+        """拉超级群会话列表(每会话带 last=最新消息 + uUnread)。返回 (code, [SessionInfo dict])。"""
+        body = proto_min.pull_chnn_session_req(self.user_id, chnn_id, client_type=client_type)
+        r = self._post("/channel/v1/sessions", body)
+        if r.status_code != 200:
+            return r.status_code, []
+        return 200, proto_min.parse_chnn_session_resp(r.content)
