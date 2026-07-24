@@ -92,3 +92,48 @@ def mes_grp_chat_reaction(grp_id, msg_id, parent_msg_id, content):
 def radio_chat_reaction(radio_id, msg_id, parent_msg_id, content):
     # RadioChat: sRadioId=2(int64) sMsgId=3(string) sContent=6(bytes) parentMsgId=13(string)
     return _fv(2, int(radio_id)) + _fs(3, msg_id) + _fb(6, content) + _fs(13, parent_msg_id)
+
+
+# ── 普通消息构造(在线/离线投递测试用;字段号读 im-common/proto/app 核实)──
+def mes_chat(to_id, msg_id, content, msg_type=1):
+    # MESChat(单聊 0x1001): sToId=1 sMsgId=3 msgType=4(1=P2P普通) sContent=7
+    body = content.encode("utf-8") if isinstance(content, str) else content
+    return _fv(1, int(to_id)) + _fs(3, msg_id) + _fv(4, msg_type) + _fb(7, body)
+
+
+def mes_grp_chat(grp_id, msg_id, content, msg_type=5):
+    # MESGrpChat(群 0x2001): sGrpId=1 sMsgId=5 sContent=8 msgType=10(5=群聊)
+    body = content.encode("utf-8") if isinstance(content, str) else content
+    return _fv(1, int(grp_id)) + _fs(5, msg_id) + _fb(8, body) + _fv(10, msg_type)
+
+
+def radio_chat(radio_id, msg_id, content):
+    # RadioChat(超级群 0x3001): sRadioId=2 sMsgId=3 sContent=6(无 msgType 字段)
+    body = content.encode("utf-8") if isinstance(content, str) else content
+    return _fv(2, int(radio_id)) + _fs(3, msg_id) + _fb(6, body)
+
+
+# ── 下行 deliver 帧解析(收方视角断言用)──
+def _s(v):  # bytes→str
+    return v.decode("utf-8", "ignore") if isinstance(v, bytes) else (v or "")
+
+
+def parse_single_deliver(body):
+    """单聊下行 0x1004/0x122d = MESChat: sToId=1 sFromId=2 sMsgId=3 sContent=7 parentMsgId=12。"""
+    f = decode(body)
+    return {"to_id": f.get(1, 0), "from_id": f.get(2, 0), "msg_id": _s(f.get(3, b"")),
+            "content": f.get(7, b""), "parent_msg_id": _s(f.get(12, b""))}
+
+
+def parse_group_deliver(body):
+    """群下行 0x2004/0x2314 = MESGrpChat: sGrpId=1 sFromId=2 sMsgId=5 sContent=8 parentMsgId=13。"""
+    f = decode(body)
+    return {"grp_id": f.get(1, 0), "from_id": f.get(2, 0), "msg_id": _s(f.get(5, b"")),
+            "content": f.get(8, b""), "parent_msg_id": _s(f.get(13, b""))}
+
+
+def parse_radio_deliver(body):
+    """超级群下行 0x3004/0x3213 = RadioChat: sFromId=1 sRadioId=2 sMsgId=3 sContent=6 parentMsgId=13。"""
+    f = decode(body)
+    return {"from_id": f.get(1, 0), "radio_id": f.get(2, 0), "msg_id": _s(f.get(3, b"")),
+            "content": f.get(6, b""), "parent_msg_id": _s(f.get(13, b""))}

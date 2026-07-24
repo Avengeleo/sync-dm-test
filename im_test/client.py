@@ -23,6 +23,20 @@ RADIO_REACTION_UPLINK = 0x3211    # 超级群回应上行
 RADIO_REACTION_ACK = 0x3212
 NON_ERR = 0x8000                  # 成功码
 
+# 普通消息:上行 / ACK / 下行 deliver(收方在线时收到);字段号见 proto_min
+SINGLE_CHAT = 0x1001
+SINGLE_CHAT_ACK = 0x1002
+SINGLE_DELIVER = 0x1004           # 单聊普通下行
+SINGLE_REACTION_DELIVER = 0x122D  # 单聊回应下行
+GROUP_CHAT = 0x2001
+GROUP_CHAT_ACK = 0x2002
+GROUP_DELIVER = 0x2004            # 群普通下行
+GROUP_REACTION_DELIVER = 0x2314   # 群回应下行
+RADIO_CHAT = 0x3001
+RADIO_CHAT_ACK = 0x3002
+RADIO_DELIVER = 0x3004            # 超级群普通下行
+RADIO_REACTION_DELIVER = 0x3213   # 超级群回应下行
+
 
 class ImWsClient:
     def __init__(self, url, user_id, token, client_type=2, timeout=10):
@@ -103,3 +117,31 @@ class ImWsClient:
         self._send(RADIO_REACTION_UPLINK, body)
         ack = proto_min.decode(self._recv_until(RADIO_REACTION_ACK))
         return {"errcode": ack.get(5, 0), "sent_msg_id": msg_id}  # RadioChatAck.errcode=5
+
+    # ── 普通消息发送(投递测试:发送端 A 调这些,收方端 B 调 recv_deliver)──
+    def send_chat(self, to_id=None, content="[selftest] hi", msg_type=1):
+        """发一条单聊普通消息(默认 sToId=self 跳好友校验)。返回 {errcode, sent_msg_id}。"""
+        to_id = self.user_id if to_id is None else int(to_id)
+        msg_id = uuid.uuid4().hex
+        self._send(SINGLE_CHAT, proto_min.mes_chat(to_id, msg_id, content, msg_type))
+        ack = proto_min.decode(self._recv_until(SINGLE_CHAT_ACK))
+        return {"errcode": ack.get(4, 0), "sent_msg_id": msg_id}  # MESChatAck.errcode=4
+
+    def send_group_chat(self, group_id, content="[selftest] hi"):
+        """发一条群普通消息(需为群成员)。返回 {errcode, sent_msg_id}。"""
+        msg_id = uuid.uuid4().hex
+        self._send(GROUP_CHAT, proto_min.mes_grp_chat(group_id, msg_id, content))
+        ack = proto_min.decode(self._recv_until(GROUP_CHAT_ACK))
+        return {"errcode": ack.get(5, 0), "sent_msg_id": msg_id}  # GroupChatAck.errcode=5
+
+    def send_channel_chat(self, radio_id, content="[selftest] hi"):
+        """发一条超级群普通消息(需在该频道有权限)。返回 {errcode, sent_msg_id}。"""
+        msg_id = uuid.uuid4().hex
+        self._send(RADIO_CHAT, proto_min.radio_chat(radio_id, msg_id, content))
+        ack = proto_min.decode(self._recv_until(RADIO_CHAT_ACK))
+        return {"errcode": ack.get(5, 0), "sent_msg_id": msg_id}  # RadioChatAck.errcode=5
+
+    def recv_deliver(self, cmd, timeout=None):
+        """收方视角:读到目标下行 deliver 帧(0x1004/0x122d/0x2004/0x2314/0x3004/0x3213),
+        返回原始 body(用 proto_min.parse_*_deliver 解析)。超时抛 TimeoutError。"""
+        return self._recv_until(cmd, timeout)

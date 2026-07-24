@@ -24,9 +24,10 @@ def _cfg():
         "url": _clean("IM_WS_URL"),
         "user_id": _clean("IM_USER_ID"),
         "token": _clean("IM_TOKEN"),
-        "client_type": int(_clean("IM_CLIENT_TYPE") or "2"),
-        "group_id": _clean("IM_GROUP_ID"),      # 你所在的一个群 id(群回应用,可选)
-        "channel_id": _clean("IM_CHANNEL_ID"),  # 你所在的一个超级群/频道 id(超级群回应用,可选)
+        "client_type": int(_clean("IM_CLIENT_TYPE") or "2"),      # 发送端 A 的端类型,默认 2=Web
+        "client_type_b": int(_clean("IM_CLIENT_TYPE_B") or "0"),  # 收方端 B 的端类型,默认 0=App(必须≠A)
+        "group_id": _clean("IM_GROUP_ID"),      # 你所在的一个群 id(群回应/群投递用,可选)
+        "channel_id": _clean("IM_CHANNEL_ID"),  # 你所在的一个超级群/频道 id(超级群回应/投递用,可选)
         "timeout": int(_clean("IM_TIMEOUT") or "10"),
     }
 
@@ -58,8 +59,28 @@ def im_client(im_config):
 
 @pytest.fixture
 def logged_in_client(im_client):
-    """已连接且已登录。"""
+    """已连接且已登录(发送端 A;clientType=IM_CLIENT_TYPE,默认 2=Web)。"""
     err = im_client.login()
     if err != NON_ERR:
         pytest.skip(f"IM 登录失败 nErr=0x{err:04x}(token 无效/过期?),跳过需登录的用例")
     return im_client
+
+
+@pytest.fixture
+def receiver_client(im_config):
+    """收方端 B:同一账号的**第二条连接**,clientType 必须与 A 不同(默认 0=App),
+    否则同 clientType 第二次登录会把前一条踢下线(0x0108)。投递测试:A 发、B 收下行。"""
+    if im_config["client_type_b"] == im_config["client_type"]:
+        pytest.skip("IM_CLIENT_TYPE_B 与 IM_CLIENT_TYPE 相同,双连接会互踢——请设为不同端类型(如 A=2 web / B=0 app)")
+    b = ImWsClient(im_config["url"], im_config["user_id"], im_config["token"],
+                   im_config["client_type_b"], im_config["timeout"])
+    try:
+        b.connect()
+    except Exception as e:
+        pytest.skip(f"收方端 B WebSocket 连接失败:{e}")
+    err = b.login()
+    if err != NON_ERR:
+        b.close()
+        pytest.skip(f"收方端 B 登录失败 nErr=0x{err:04x},跳过投递用例")
+    yield b
+    b.close()
