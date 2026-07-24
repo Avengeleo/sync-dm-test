@@ -2,8 +2,8 @@
 
 契约(读 handler_sticker.go 核实):
   add: {fav_type(1贴图/2GIF,必填非0), img_url(必填), pack_id(贴图必填/GIF空), ...} → 200;幂等;每类>10 → 403
-  list: {fav_type(0全部/1/2)} → {list:[{favType,packId,imgUrl,...,favTime}]},最新在前
-  del: {items:[{fav_type,pack_id,img_url}]} 批量幂等
+  list: {fav_type(0全部/1/2)} → {list:[{id,favType,packId,imgUrl,...,favTime}]},最新在前
+  del: {ids:"id1|id2"} 按行 id 批量删(id 取自 list;网关签名要求扁平串,不能传嵌套数组)
   收藏存快照(不校验贴图是否真存在),故用例可用任意 pack_id+img_url,自成一体。
 """
 
@@ -24,11 +24,13 @@ def test_add_list_del_roundtrip(dm_client, fav_cleaner):
                           file_name="rt1.webp", width=240, height=240).expect_ok()
 
     data = dm_client.my_fav_list(fav_type=1).expect_ok().data or {}
-    urls = [f.get("imgUrl") for f in (data.get("list") or [])]
+    rows = data.get("list") or []
+    urls = [f.get("imgUrl") for f in rows]
     assert img in urls, "收藏后列表应包含刚加的图"
 
-    # 删除后应消失
-    dm_client.my_fav_del([{"fav_type": 1, "pack_id": "PACKSELFTEST", "img_url": img}]).expect_ok()
+    # 删除后应消失(按行 id 删)
+    fav_id = next(f["id"] for f in rows if f.get("imgUrl") == img)
+    dm_client.my_fav_del([fav_id]).expect_ok()
     data = dm_client.my_fav_list(fav_type=1).expect_ok().data or {}
     urls = [f.get("imgUrl") for f in (data.get("list") or [])]
     assert img not in urls, "删除后列表不应再有该图"

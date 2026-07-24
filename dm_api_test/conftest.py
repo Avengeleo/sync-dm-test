@@ -72,7 +72,7 @@ def fav_cleaner(dm_client):
     yield _track
     if added:
         try:
-            dm_client.my_fav_del(added)
+            _cleanup_by_imgurl(dm_client.my_fav_list, dm_client.my_fav_del, added)
         except Exception:
             pass
 
@@ -88,6 +88,21 @@ def recent_cleaner(dm_client):
     yield _track
     if added:
         try:
-            dm_client.recent_del(added)
+            _cleanup_by_imgurl(dm_client.recent_list, dm_client.recent_del, added)
         except Exception:
             pass
+
+
+def _cleanup_by_imgurl(list_fn, del_fn, added):
+    """added=[{fav_type,pack_id,img_url}];按 img_url 在对应 list 里查出行 id 再批量删。"""
+    want = {}
+    for a in added:
+        want.setdefault(a["fav_type"], set()).add(a["img_url"])
+    ids = []
+    for ft, imgs in want.items():
+        data = (list_fn(ft).data or {})
+        for it in (data.get("list") or []):
+            if it.get("imgUrl") in imgs and it.get("id"):
+                ids.append(it["id"])
+    if ids:
+        del_fn(ids)

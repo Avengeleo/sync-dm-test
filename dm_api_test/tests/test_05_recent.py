@@ -2,8 +2,8 @@
 
 契约(读 handler_sticker.go/stickerDb.go 核实;emoji=fav_type3,key 存 img_url,上限14):
   report: {fav_type(1贴图/2GIF),img_url,pack_id(贴图必填/GIF空),...} → upsert;贴图上限10/GIF20,超量淘汰最旧
-  list:   {fav_type} → {list:[{favType,packId,imgUrl,...,useTime}]},最近在前
-  del:    {items:[{fav_type,pack_id,img_url}]} 批量
+  list:   {fav_type} → {list:[{id,favType,packId,imgUrl,...,useTime}]},最近在前
+  del:    {ids:"id1|id2"} 按行 id 批量删(id 取自 list;网关签名要求扁平串,不能传嵌套数组)
 注意:用例会写该用户真实"最近使用"(测试环境账号),结束自动清理;超上限用例会挤掉该用户既有最近使用(可接受,本就 ephemeral)。
 """
 
@@ -53,7 +53,9 @@ def test_del(dm_client, recent_cleaner):
     img = _IMG.format("del")
     recent_cleaner(1, img, "PACKR")
     dm_client.recent_report(1, img, pack_id="PACKR").expect_ok()
-    dm_client.recent_del([{"fav_type": 1, "pack_id": "PACKR", "img_url": img}]).expect_ok()
+    rows = (dm_client.recent_list(1).expect_ok().data or {}).get("list") or []
+    rid = next(x["id"] for x in rows if x.get("imgUrl") == img)
+    dm_client.recent_del([rid]).expect_ok()
     assert img not in _urls(dm_client.recent_list(1).expect_ok()), "删除后列表不应再有"
 
 

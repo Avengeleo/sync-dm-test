@@ -114,9 +114,10 @@ class DmApiClient(BaseClient):
             "file_name": file_name, "width": width, "height": height,
         })
 
-    def my_fav_del(self, items):
-        # items = [{"fav_type":1,"pack_id":"","img_url":"..."}]
-        return self.call("/user/sticker/my_fav/del", {"items": items})
+    def my_fav_del(self, ids):
+        # ids = 行 id 列表(int)或已拼好的 "id1|id2" 串;取自 my_fav/list 每条的 id
+        ids_str = ids if isinstance(ids, str) else "|".join(str(i) for i in ids)
+        return self.call("/user/sticker/my_fav/del", {"ids": ids_str})
 
     # ── 最近使用 ──
     def recent_report(self, fav_type, img_url, pack_id="", file_name="", width=0, height=0):
@@ -128,8 +129,10 @@ class DmApiClient(BaseClient):
     def recent_list(self, fav_type):
         return self.call("/user/sticker/recent/list", {"fav_type": fav_type})
 
-    def recent_del(self, items):
-        return self.call("/user/sticker/recent/del", {"items": items})
+    def recent_del(self, ids):
+        # ids = 行 id 列表(int)或 "id1|id2" 串;取自 recent/list 每条的 id
+        ids_str = ids if isinstance(ids, str) else "|".join(str(i) for i in ids)
+        return self.call("/user/sticker/recent/del", {"ids": ids_str})
 
     # ── 快捷回应 bar(最常用回应表情)──
     def reaction_emoji_report(self, emoji):
