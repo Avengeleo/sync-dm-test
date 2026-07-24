@@ -1,9 +1,9 @@
-"""超级群心情回应 离线 = 「在线态,离线不可得」(设计验证;第二账号 B 作离线收方)。
+"""超级群心情回应 离线拉取(游标端点 /channel/v1/offlineMessages;第二账号 B 作离线收方)。
 
-超级群回应既不进未读会话(eventType=2 不计未读),离线拉取端点 /channel/v1/offlineMessages
-也**硬过滤 Chnn_MsgType_Normal**(channel-pull-server 只查普通消息)→ 回应无离线获取路径,
-属在线态消息。此用例锁定该行为:A 发 1 条普通 + 1 条回应,B 离线拉取 → 普通在、回应不在、返回项全为普通(eventType=0)。
-需:A、B 均为 IM_CHANNEL_ID 成员;B 的 IM_USER_ID2/IM_TOKEN2;B 当前不在线。建议用安静的测试频道。
+v2.21.2 已把频道离线拉取的 msgType 过滤放宽为 $in [Normal, 心情回应](im-common/dao/msg_dao/
+channel_bson.go:16/118,注释「Normal + 心情回应一起下发,已拍板放宽 $in」),故超级群回应**能**
+离线拉到,响应回填 eventType=2(=落库 msgType)+ parentMsgId。回应不进未读会话(test_09 的
+session 端点看不到它),但游标消息端点能拉。需:A、B 均为 IM_CHANNEL_ID 成员;B 当前不在线。
 """
 
 import time
@@ -14,6 +14,8 @@ import requests
 
 from im_test.client import NON_ERR
 
+CHNN_EVENT_REACTION = 2  # ChnnChat.eventType:0=普通 2=心情回应
+
 
 @pytest.fixture
 def channel_id(im_config):
@@ -23,32 +25,29 @@ def channel_id(im_config):
     return int(cid)
 
 
-def _has(rows, mid):
-    return any(r["msg_id"] == mid for r in rows)
-
-
-@pytest.mark.write
-def test_channel_reaction_offline_is_online_only(logged_in_client, offline_http_b, channel_id):
-    a = logged_in_client
-    normal = a.send_channel_chat(channel_id, content="[selftest] chn-normal-" + uuid.uuid4().hex[:8])
-    assert normal["errcode"] == NON_ERR, f"超级群普通上行未被接受 0x{normal['errcode']:04x}"
-    parent = uuid.uuid4().hex
-    react = a.send_channel_reaction(channel_id, parent_msg_id=parent)
-    assert react["errcode"] == NON_ERR, f"超级群回应上行未被接受 0x{react['errcode']:04x}"
-
-    # 轮询到「普通消息可离线拉到」——证明游标/端点工作(否则回应不在是假阳性)
-    rows = []
-    deadline = time.time() + 45
+def _pull_until(http_b, chnn_id, msg_id, timeout=45):
+    deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            code, rows = offline_http_b.channel_offline_messages(channel_id, count=100, direction=1)
+            code, rows = http_b.channel_offline_messages(chnn_id, count=100, direction=1)
         except requests.exceptions.RequestException:
             continue
         assert code == 200, f"超级群离线拉取 HTTP {code}(鉴权/域名?)"
-        if _has(rows, normal["sent_msg_id"]):
-            break
+        hit = next((r for r in rows if r["msg_id"] == msg_id), None)
+        if hit:
+            return hit
         time.sleep(0.6)
+    return None
 
-    assert _has(rows, normal["sent_msg_id"]), "普通消息应能离线拉到(证明游标端点可用)"
-    assert not _has(rows, react["sent_msg_id"]), "超级群回应按设计不进离线拉取(eventType=2 被硬过滤)——在线态,离线不可得"
-    assert all(r["event_type"] == 0 for r in rows), "offlineMessages 只应返回普通消息(eventType=0)"
+
+@pytest.mark.write
+def test_channel_reaction_offline_pull(logged_in_client, offline_http_b, channel_id):
+    a = logged_in_client
+    parent = uuid.uuid4().hex
+    r = a.send_channel_reaction(channel_id, parent_msg_id=parent)
+    assert r["errcode"] == NON_ERR, f"超级群回应上行未被接受 errcode=0x{r['errcode']:04x}"
+
+    hit = _pull_until(offline_http_b, channel_id, r["sent_msg_id"])
+    assert hit is not None, "B 未经 /channel/offlineMessages 拉到超级群回应(游标?B 是否频道成员/离线?)"
+    assert hit["event_type"] == CHNN_EVENT_REACTION, f"超级群回应离线行 eventType 应为 2,实际 {hit['event_type']}"
+    assert hit["parent_msg_id"] == parent, "超级群回应离线行 parentMsgId 应为被回应消息 id"
