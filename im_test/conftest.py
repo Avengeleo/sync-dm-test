@@ -12,6 +12,7 @@ import os
 import pytest
 
 from im_test.client import ImWsClient, NON_ERR
+from im_test.http_offline import OfflineHttpClient
 
 
 def _clean(key):
@@ -28,6 +29,7 @@ def _cfg():
         "client_type_b": int(_clean("IM_CLIENT_TYPE_B") or "0"),  # 收方端 B 的端类型,默认 0=App(必须≠A)
         "group_id": _clean("IM_GROUP_ID"),      # 你所在的一个群 id(群回应/群投递用,可选)
         "channel_id": _clean("IM_CHANNEL_ID"),  # 你所在的一个超级群/频道 id(超级群回应/投递用,可选)
+        "http_base": _clean("IM_HTTP_BASE_URL"),  # http-gateway 域名(离线拉取用,如 https://im-http.ramon2025.com:3801)
         "timeout": int(_clean("IM_TIMEOUT") or "10"),
     }
 
@@ -84,3 +86,12 @@ def receiver_client(im_config):
         pytest.skip(f"收方端 B 登录失败 nErr=0x{err:04x},跳过投递用例")
     yield b
     b.close()
+
+
+@pytest.fixture
+def offline_http(im_config):
+    """离线拉取 HTTP 客户端(http-gateway;Authorization={token}:{userId})。未配 IM_HTTP_BASE_URL 则 skip。"""
+    base = im_config.get("http_base")
+    if not base:
+        pytest.skip("未配置 IM_HTTP_BASE_URL,跳过离线拉取用例")
+    return OfflineHttpClient(base, im_config["token"], im_config["user_id"], im_config["timeout"])

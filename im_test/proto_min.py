@@ -137,3 +137,54 @@ def parse_radio_deliver(body):
     f = decode(body)
     return {"from_id": f.get(1, 0), "radio_id": f.get(2, 0), "msg_id": _s(f.get(3, b"")),
             "content": f.get(6, b""), "parent_msg_id": _s(f.get(13, b""))}
+
+
+# ── 离线拉取(HTTP REST;字段号读 im-common/proto/msgsrv/msgsrv.proto 核实)──
+def decode_all(data):
+    """repeated-aware 解码:同字段号多值收进 list(离线 Resp 的 repeated msgList 必须用这个,
+    decode() 会被最后一条覆盖)。返回 {字段号: [值,...]}。"""
+    fields = {}
+    i, n = 0, len(data)
+    while i < n:
+        tag, i = _dec_varint(data, i)
+        fn, wt = tag >> 3, tag & 7
+        if wt == 0:
+            v, i = _dec_varint(data, i)
+        elif wt == 2:
+            ln, i = _dec_varint(data, i)
+            v = data[i:i + ln]
+            i += ln
+        elif wt == 1:
+            v = data[i:i + 8]
+            i += 8
+        elif wt == 5:
+            v = data[i:i + 4]
+            i += 4
+        else:
+            break
+        fields.setdefault(fn, []).append(v)
+    return fields
+
+
+def offline_chat_msg_req(user_id, limit=50, client_type=0, msg_id=""):
+    # OfflineChatMsgReq: userId=1 msgId=2 limit=4 clientType=5(deliveredMsgInfos=3 本测试不带)
+    out = _fv(1, int(user_id))
+    if msg_id:
+        out += _fs(2, msg_id)
+    return out + _fv(4, int(limit)) + _fv(5, int(client_type))
+
+
+def parse_offline_resp(body):
+    """OfflineChatMsgResp: msgList=3(repeated OfflineChatMsg)。
+    OfflineChatMsg: cmdId=1 sMsgData=2 sMsgId=3 sFromId=4 sToId=5 msgTime=6 parentMsgId=8 isRead=9。
+    返回 [{cmd_id,msg_id,from_id,to_id,parent_msg_id,is_read,data(bytes)}]。"""
+    rows = decode_all(body).get(3, [])
+    out = []
+    for raw in rows:
+        f = decode(raw)
+        out.append({
+            "cmd_id": f.get(1, 0), "data": f.get(2, b""), "msg_id": _s(f.get(3, b"")),
+            "from_id": f.get(4, 0), "to_id": f.get(5, 0),
+            "parent_msg_id": _s(f.get(8, b"")), "is_read": f.get(9, 0),
+        })
+    return out
