@@ -31,6 +31,7 @@ def _cfg():
         "channel_id": _clean("IM_CHANNEL_ID"),  # 你所在的一个超级群/频道 id(超级群回应/投递用,可选)
         "http_base": _clean("IM_HTTP_BASE_URL"),  # http-gateway 域名(离线拉取用,如 https://im-http.ramon2025.com:3801)
         "timeout": int(_clean("IM_TIMEOUT") or "10"),
+        "http_timeout": int(_clean("IM_HTTP_TIMEOUT") or "15"),  # 离线 HTTP 单次超时(冷调用/mongo 慢可能偏慢)
     }
 
 
@@ -94,4 +95,4 @@ def offline_http(im_config):
     base = im_config.get("http_base")
     if not base:
         pytest.skip("未配置 IM_HTTP_BASE_URL,跳过离线拉取用例")
-    return OfflineHttpClient(base, im_config["token"], im_config["user_id"], im_config["timeout"])
+    return OfflineHttpClient(base, im_config["token"], im_config["user_id"], im_config["http_timeout"])
