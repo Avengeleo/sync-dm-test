@@ -39,10 +39,13 @@ RADIO_REACTION_DELIVER = 0x3213   # 超级群回应下行
 
 
 class ImWsClient:
-    def __init__(self, url, user_id, token, client_type=2, timeout=10):
+    def __init__(self, url, user_id, token, client_type=2, timeout=10, app_version=None):
         self.url = url
         self.user_id = int(user_id)
         self.token = token
+        # CMLogin.sVersionCode:版本兼容门用。None=不覆盖(走 proto_min 默认);
+        # 传低版本(如 "2.20.0")即模拟老客户端,服务端应拒发新消息类型。
+        self.app_version = app_version
         self.client_type = client_type
         self.timeout = timeout
         self.ws = None
@@ -78,7 +81,8 @@ class ImWsClient:
 
     def login(self):
         """返回登录错误码(NON_ERR=0x8000 为成功)。"""
-        self._send(CM_LOGIN, proto_min.cm_login(self.user_id, self.token, self.client_type))
+        self._send(CM_LOGIN, proto_min.cm_login(self.user_id, self.token, self.client_type,
+                                                app_version=self.app_version))
         f = proto_min.decode(self._recv_until(CM_LOGIN_ACK))
         return f.get(2, 0)  # CMLoginAck.nErr
 
@@ -145,3 +149,12 @@ class ImWsClient:
         """收方视角:读到目标下行 deliver 帧(0x1004/0x122d/0x2004/0x2314/0x3004/0x3213),
         返回原始 body(用 proto_min.parse_*_deliver 解析)。超时抛 TimeoutError。"""
         return self._recv_until(cmd, timeout)
+
+    def expect_no_deliver(self, cmd, timeout=6):
+        """断言在 timeout 内**收不到**该下行(版本兼容门:老客户端不应收到新消息类型)。
+        收到即返回 False(门失效);超时未收到返回 True(符合预期)。"""
+        try:
+            self._recv_until(cmd, timeout)
+            return False
+        except TimeoutError:
+            return True

@@ -30,6 +30,8 @@ def _cfg():
         "group_id": _clean("IM_GROUP_ID"),      # 你所在的一个群 id(群回应/群投递用,可选)
         "channel_id": _clean("IM_CHANNEL_ID"),  # 你所在的一个超级群/频道 id(超级群回应/投递用,可选)
         "http_base": _clean("IM_HTTP_BASE_URL"),  # http-gateway 域名(离线拉取用,如 https://im-http.ramon2025.com:3801)
+        "old_app_version": _clean("IM_OLD_APP_VERSION") or "2.20.0",  # 版本兼容门:模拟老客户端的版本号(须 < 门槛)
+        "new_app_version": _clean("IM_NEW_APP_VERSION") or "9.9.9",   # 模拟够版本客户端(须 >= 门槛)
         "user_id2": _clean("IM_USER_ID2"),  # 第二账号 B(群/超级群离线作离线收方)
         "token2": _clean("IM_TOKEN2"),
         "timeout": int(_clean("IM_TIMEOUT") or "10"),
@@ -111,3 +113,46 @@ def offline_http_b(im_config):
     if not uid2 or not tok2:
         pytest.skip("未配置 IM_USER_ID2 / IM_TOKEN2(第二账号 B),跳过群/超级群离线用例")
     return OfflineHttpClient(base, tok2, uid2, im_config["http_timeout"])
+
+
+@pytest.fixture
+def old_receiver_client(im_config):
+    """版本兼容门用:收方端 B 以**低版本**登录(clientType 同 receiver_client,默认 App=0)。
+    服务端应拒绝向它下发心情回应(0x122d/0x2314/0x3213),但普通消息照常。"""
+    if im_config["client_type_b"] == im_config["client_type"]:
+        pytest.skip("IM_CLIENT_TYPE_B 与 IM_CLIENT_TYPE 相同,双连接会互踢")
+    b = ImWsClient(im_config["url"], im_config["user_id"], im_config["token"],
+                   im_config["client_type_b"], im_config["timeout"],
+                   app_version=im_config["old_app_version"])
+    try:
+        b.connect()
+    except Exception as e:
+        pytest.skip(f"低版本收方端连接失败:{e}")
+    err = b.login()
+    if err != NON_ERR:
+        b.close()
+        pytest.skip(f"低版本收方端登录失败 nErr=0x{err:04x}")
+    yield b
+    b.close()
+
+
+@pytest.fixture
+def old_version_offline_http(im_config):
+    """低版本身份的离线拉取:先用低版本登录刷新 Redis 里的 app_version,再走 HTTP 拉。
+    离线门控读的是 Redis 版本(登录时写入),故必须先建立一次低版本登录。"""
+    base = im_config.get("http_base")
+    if not base:
+        pytest.skip("未配置 IM_HTTP_BASE_URL,跳过离线用例")
+    c = ImWsClient(im_config["url"], im_config["user_id"], im_config["token"],
+                   im_config["client_type_b"], im_config["timeout"],
+                   app_version=im_config["old_app_version"])
+    try:
+        c.connect()
+    except Exception as e:
+        pytest.skip(f"低版本登录连接失败:{e}")
+    err = c.login()
+    if err != NON_ERR:
+        c.close()
+        pytest.skip(f"低版本登录失败 nErr=0x{err:04x}")
+    c.close()  # 断开=离线,但 Redis 里 app_version 已是低版本
+    yield OfflineHttpClient(base, im_config["token"], im_config["user_id"], im_config["http_timeout"])

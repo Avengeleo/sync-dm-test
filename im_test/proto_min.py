@@ -72,8 +72,12 @@ def decode(data):
 
 
 # ── 消息构造 ──
-def cm_login(user_id, token, client_type=2, device_token="web"):
-    return _fv(1, int(user_id)) + _fs(2, token) + _fs(3, device_token) + _fv(8, client_type)
+def cm_login(user_id, token, client_type=2, device_token="web", app_version=None):
+    # CMLogin: sUserId=1 sLoginToken=2 sDeviceToken=3 sVersionCode=6 clientType=8
+    body = _fv(1, int(user_id)) + _fs(2, token) + _fs(3, device_token)
+    if app_version is not None:
+        body += _fs(6, str(app_version))  # 版本兼容门:服务端按此判定新老客户端
+    return body + _fv(8, client_type)
 
 
 def mes_reaction_content(emoji, action=0):
