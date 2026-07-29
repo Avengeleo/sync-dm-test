@@ -54,8 +54,11 @@ def im_config():
 @pytest.fixture
 def im_client(im_config):
     """已连接、未登录(供登录用例自己测 login)。"""
+    # 带 new_app_version 登录:代表"当前版本客户端"。不传版本会被版本兼容门按失败关闭判老,
+    # 导致 test_04/05/06 的回应用例被门挡住(误报)。
     c = ImWsClient(im_config["url"], im_config["user_id"], im_config["token"],
-                   im_config["client_type"], im_config["timeout"])
+                   im_config["client_type"], im_config["timeout"],
+                   app_version=im_config["new_app_version"])
     try:
         c.connect()
     except Exception as e:
@@ -80,7 +83,8 @@ def receiver_client(im_config):
     if im_config["client_type_b"] == im_config["client_type"]:
         pytest.skip("IM_CLIENT_TYPE_B 与 IM_CLIENT_TYPE 相同,双连接会互踢——请设为不同端类型(如 A=2 web / B=0 app)")
     b = ImWsClient(im_config["url"], im_config["user_id"], im_config["token"],
-                   im_config["client_type_b"], im_config["timeout"])
+                   im_config["client_type_b"], im_config["timeout"],
+                   app_version=im_config["new_app_version"])  # 够版本端,不应被门拦
     try:
         b.connect()
     except Exception as e:

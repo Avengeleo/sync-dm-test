@@ -71,7 +71,10 @@ class ImWsClient:
         deadline = time.time() + (timeout or self.timeout)
         while time.time() < deadline:
             self.ws.settimeout(max(0.1, deadline - time.time()))
-            data = self.ws.recv()
+            try:
+                data = self.ws.recv()
+            except (websocket.WebSocketTimeoutException, TimeoutError):
+                continue  # 底层读超时:由外层 deadline 统一判定(expect_no_deliver 依赖此语义)
             if isinstance(data, str) or not data:
                 continue  # 文本/空帧忽略(业务全走 binary)
             cmd, body = frame.parse_frame(data)
@@ -156,5 +159,5 @@ class ImWsClient:
         try:
             self._recv_until(cmd, timeout)
             return False
-        except TimeoutError:
+        except (TimeoutError, websocket.WebSocketTimeoutException):
             return True
