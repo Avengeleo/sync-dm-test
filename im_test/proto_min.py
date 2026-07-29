@@ -170,11 +170,17 @@ def decode_all(data):
     return fields
 
 
-def offline_chat_msg_req(user_id, limit=50, client_type=0, msg_id=""):
-    # OfflineChatMsgReq: userId=1 msgId=2 limit=4 clientType=5(deliveredMsgInfos=3 本测试不带)
+def offline_chat_msg_req(user_id, limit=50, client_type=0, msg_id="", delivered=None):
+    """OfflineChatMsgReq: userId=1 msgId=2 deliveredMsgInfos=3(repeated) limit=4 clientType=5。
+    delivered=[{msg_id, msg_time, cmd_id}]:回带"已收到"的消息,服务端据此 MarkPulled
+    (只标回带的 msgId——这正是"被 filter 排除的行不会被误标"的机制所在)。"""
     out = _fv(1, int(user_id))
     if msg_id:
         out += _fs(2, msg_id)
+    for d in (delivered or []):
+        # DeliverMsgInfo: msgId=1 msgTime=2 cmdId=3
+        item = _fs(1, d["msg_id"]) + _fv(2, int(d.get("msg_time", 0))) + _fv(3, int(d.get("cmd_id", 0)))
+        out += _fb(3, item)
     return out + _fv(4, int(limit)) + _fv(5, int(client_type))
 
 
@@ -188,7 +194,7 @@ def parse_offline_resp(body):
         f = decode(raw)
         out.append({
             "cmd_id": f.get(1, 0), "data": f.get(2, b""), "msg_id": _s(f.get(3, b"")),
-            "from_id": f.get(4, 0), "to_id": f.get(5, 0),
+            "from_id": f.get(4, 0), "to_id": f.get(5, 0), "msg_time": f.get(6, 0),
             "parent_msg_id": _s(f.get(8, b"")), "is_read": f.get(9, 0),
         })
     return out

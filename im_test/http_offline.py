@@ -26,9 +26,11 @@ class OfflineHttpClient:
         }
         return requests.post(self.base_url + path, data=body, headers=headers, timeout=self.timeout)
 
-    def offline_chat(self, client_type=0, limit=50):
-        """拉单聊离线消息(收方副本)。返回 (status_code, [OfflineChatMsg dict])。"""
-        body = proto_min.offline_chat_msg_req(self.user_id, limit=limit, client_type=client_type)
+    def offline_chat(self, client_type=0, limit=50, delivered=None):
+        """拉单聊离线消息(收方副本)。delivered=[{msg_id,msg_time,cmd_id}] 回带已收到的消息
+        (服务端据此 MarkPulled,模拟真实客户端 ack)。返回 (status_code, [OfflineChatMsg dict])。"""
+        body = proto_min.offline_chat_msg_req(self.user_id, limit=limit, client_type=client_type,
+                                              delivered=delivered)
         r = self._post("/offline/v1/chat", body)
         if r.status_code != 200:
             return r.status_code, []

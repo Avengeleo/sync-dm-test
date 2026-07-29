@@ -115,3 +115,52 @@ def test_upgrade_backfill(im_config, logged_in_client, old_version_offline_http)
         "升级后应能补拉到之前被排除的回应;拉不到=被排除的行被误标已拉取(严重:消息永久丢失)"
     )
     assert hit["cmd_id"] == SINGLE_REACTION_DELIVER
+
+
+@pytest.mark.write
+def test_ack_does_not_mark_filtered_reaction(im_config, logged_in_client, old_version_offline_http):
+    """核心保证:老版本 ack 已收到的普通消息后,**被过滤的回应行不应被连带标记已拉取**。
+
+    这条比 test_upgrade_backfill 更强:那条用例的客户端从不回带 ack,库里所有行的
+    pulled 恒为 0,因此测不出"污染"。真实客户端会 ack;服务端 MarkPulled 只标客户端
+    回带的 msgId,被 filter 层排除的行根本没返回、不可能出现在 ack 列表里 —— 本用例
+    走完整的 拉取→ack→再拉 循环来验证这一点。
+    """
+    a = logged_in_client
+    react = a.send_reaction(to_id=a.user_id, parent_msg_id=uuid.uuid4().hex)
+    assert react["errcode"] == NON_ERR
+    normal = a.send_chat(to_id=a.user_id, content="[selftest] gate-ack-" + uuid.uuid4().hex[:8])
+    assert normal["errcode"] == NON_ERR
+
+    # 1) 老版本拉取:应拿到普通消息、拿不到回应
+    hit, rows = _wait_rows(old_version_offline_http, normal["sent_msg_id"])
+    assert hit is not None, "普通消息应能拉到"
+    assert not any(r["msg_id"] == react["sent_msg_id"] for r in rows), "老版本不应拉到回应"
+
+    # 2) 模拟真实客户端 ack:回带本轮拿到的所有消息(全是普通消息)
+    delivered = [{"msg_id": r["msg_id"], "msg_time": r["msg_time"], "cmd_id": r["cmd_id"]} for r in rows]
+    assert delivered, "应有可 ack 的消息"
+    code, _ = old_version_offline_http.offline_chat(
+        client_type=OFFLINE_CLIENT_TYPE, limit=100, delivered=delivered)
+    assert code == 200, f"带 ack 的拉取 HTTP {code}"
+
+    # 3) 再拉:已 ack 的普通消息不应再返回(证明 ack 真的生效、pulled 被标了)
+    code, after = old_version_offline_http.offline_chat(client_type=OFFLINE_CLIENT_TYPE, limit=100)
+    assert code == 200
+    assert not any(r["msg_id"] == normal["sent_msg_id"] for r in after), (
+        "ack 过的普通消息不应再返回——若仍返回说明 ack 未生效,本用例的验证前提不成立"
+    )
+
+    # 4) 换新版本登录后拉:被过滤的回应应能补到(证明它没被 ack 连带标记)
+    c = ImWsClient(im_config["url"], im_config["user_id"], im_config["token"],
+                   im_config["client_type_b"], im_config["timeout"],
+                   app_version=im_config["new_app_version"])
+    c.connect()
+    assert c.login() == NON_ERR
+    c.close()
+
+    hit2, _ = _wait_rows(old_version_offline_http, react["sent_msg_id"])
+    assert hit2 is not None, (
+        "ack 普通消息后,被过滤的回应仍应能补拉到;拉不到=回应行被连带标记已拉取(消息永久丢失)"
+    )
+    assert hit2["cmd_id"] == SINGLE_REACTION_DELIVER
