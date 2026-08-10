@@ -125,3 +125,50 @@ def test_gif_fav_no_pack_id(dm_client, fav_cleaner):
     img = _IMG.format("gif")
     fav_cleaner(2, img, "")
     dm_client.my_fav_add(fav_type=2, img_url=img, pack_id="").expect_ok()
+
+
+# 删除未命中任何行的业务码(2026-08-10 新增)。原先无论删掉几行都返 200,
+# 客户端"移除成功"但库里没减,再收藏就撞 40701——正是本次线上反馈的现象。
+CODE_DEL_NOTHING = 40702
+
+
+@pytest.mark.write
+def test_delete_then_add_at_limit(dm_client, fav_cleaner):
+    """复现客户端反馈:GIF 满 10 → 删掉 1 个 → 再添加应当成功(不能再返 40701)。"""
+    _fill_to_limit(dm_client, fav_cleaner, 2, "", "delre")
+
+    rows = (dm_client.my_fav_list(fav_type=2).expect_ok().data or {}).get("list") or []
+    assert len(rows) >= FAV_LIMIT_PER_TYPE, f"应已满 {FAV_LIMIT_PER_TYPE},实际 {len(rows)}"
+
+    # 用 list 返回的真实行 id 删一条
+    dm_client.my_fav_del([rows[0]["id"]]).expect_ok()
+
+    after = (dm_client.my_fav_list(fav_type=2).expect_ok().data or {}).get("list") or []
+    assert len(after) == len(rows) - 1, (
+        f"删除后应少一条(删前 {len(rows)}、删后 {len(after)});数量没变说明删除是静默假成功"
+    )
+
+    # 腾出位置后再添加,必须成功
+    img = _IMG.format("delre_new")
+    fav_cleaner(2, img, "")
+    dm_client.my_fav_add(fav_type=2, img_url=img, pack_id="").expect_ok()
+
+
+@pytest.mark.write
+def test_delete_bad_id_reports_error(dm_client, fav_cleaner):
+    """传不存在的 id → 40702,不能静默返 200
+    (静默成功正是"客户端以为删了、其实没删"的根因)。"""
+    img = _IMG.format("badid")
+    fav_cleaner(2, img, "")
+    dm_client.my_fav_add(fav_type=2, img_url=img, pack_id="").expect_ok()
+
+    env = dm_client.my_fav_del([99999999])  # 不存在的行 id
+    assert env.code == CODE_DEL_NOTHING, (
+        f"删除未命中任何行应返 {CODE_DEL_NOTHING},实际 {env.code}。"
+        f"若为 200 → user-srv 未部署本次修复"
+    )
+    assert env.msg, "msg 应带「删除失败:记录不存在或不属于当前用户」"
+
+    # 该条收藏应仍在(证明确实没误删)
+    urls = [x.get("imgUrl") for x in ((dm_client.my_fav_list(fav_type=2).expect_ok().data or {}).get("list") or [])]
+    assert img in urls, "删除失败时不应影响其它收藏"
