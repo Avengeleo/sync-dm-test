@@ -79,3 +79,25 @@ def test_multi_codepoint_emoji(dm_client):
     got = _counts(dm_client.reaction_emoji_top(limit=100).expect_ok())
     similar = [k for k in got if k and "\U0001F468" in k]
     assert family in got, f"多码位 emoji 未原样存回;实际 keys 中含 👨 的:{similar}"
+
+
+@pytest.mark.write
+def test_skin_tone_variants_are_distinct(dm_client):
+    """肤色变体应各自成行。dev 实测列 collation 是 utf8mb4_0900_ai_ci,
+    其中 ai=accent insensitive 可能把肤色修饰符(U+1F3FB..U+1F3FF)当"重音"忽略,
+    使 👍🏻 / 👍🏽 / 👍 被判为相等 —— 而两张表都有唯一键,判等即撞键合并:
+    计数会串到一起、快捷 bar 显示的肤色也会不是用户选的那个。
+    若本条红,处置选项:该列改 utf8mb4_bin,或客户端统一去掉肤色修饰符后上报。
+    """
+    base = "\U0001F44D"                      # 👍
+    light = base + "\U0001F3FB"              # 👍🏻
+    dark = base + "\U0001F3FF"               # 👍🏿
+    for e in (base, light, dark):
+        dm_client.reaction_emoji_report(e).expect_ok()
+
+    got = _counts(dm_client.reaction_emoji_top(limit=100).expect_ok())
+    present = [e for e in (base, light, dark) if e in got]
+    assert len(present) == 3, (
+        f"👍 与两种肤色变体应是 3 个独立 key,实际只找到 {len(present)} 个:{present}。"
+        f"缺失说明 collation(utf8mb4_0900_ai_ci)把它们判为相等并撞了唯一键"
+    )
