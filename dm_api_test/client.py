@@ -140,3 +140,12 @@ class DmApiClient(BaseClient):
 
     def reaction_emoji_top(self, limit=0):
         return self.call("/user/reaction/emoji/top", {"limit": limit})
+
+    # ── 活动中心 H5 入口(v2.22.3)──
+    # 注意路径不在 /user 下,而在 /active 下,与其它用户接口分组不同。
+    # 刻意不收 openId/userId:玩家身份由网关从登录态换,客户端传不了也不该能传。
+    def saas_activity_entry(self, currency="USDT", sys_lang=""):
+        body = {"currency": currency}
+        if sys_lang:
+            body["sys_lang"] = sys_lang
+        return self.call("/active/saas/activity/entry", body)
