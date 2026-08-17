@@ -92,3 +92,30 @@ def test_entry_reissues_token(dm_client):
     t2 = re.search(r"token=([^&#]+)", _entry(dm_client).get("h5_url") or "")
     assert t1 and t2
     assert t1.group(1) != t2.group(1), "每次调用应现签一枚(jti 不同),便于按需缩短有效期"
+
+
+def test_print_entry_url(dm_client):
+    """人工联调用:把活动中心链接打到控制台,直接贴浏览器打开。
+
+    pytest 默认吞掉通过用例的 stdout,要加 -s:
+
+        pytest dm_api_test/tests/test_07_activity_entry.py::test_print_entry_url -s
+
+    PyCharm 里在 Run Configuration 的 Additional Arguments 填 -s,或直接看失败输出。
+
+    ⚠️ 打出来的链接里带的是**可代该玩家领奖的 bearer 令牌**,有效期 2 小时。
+    自己开没问题,别贴进工单/群里。
+    """
+    d = _entry(dm_client)
+    url = d.get("h5_url") or ""
+
+    print("\n" + "=" * 78)
+    print("活动中心链接（有效期 %s 秒，含玩家令牌，勿外传）" % d.get("expires_in"))
+    print("=" * 78)
+    print(url)
+    print("-" * 78)
+    print("merchantId=%s  userId=%s  tabTitle=%s  enabled=%s"
+          % (d.get("merchant_id"), d.get("user_id"), d.get("tab_title"), d.get("enabled")))
+    print("=" * 78 + "\n")
+
+    assert url, "没拿到链接"
