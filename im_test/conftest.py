@@ -13,6 +13,7 @@ import pytest
 
 from im_test.client import ImWsClient, NON_ERR
 from im_test.http_offline import OfflineHttpClient
+from im_test.offline_drain import drain_single
 
 
 def _clean(key):
@@ -104,6 +105,21 @@ def offline_http(im_config):
     if not base:
         pytest.skip("未配置 IM_HTTP_BASE_URL,跳过离线拉取用例")
     return OfflineHttpClient(base, im_config["token"], im_config["user_id"], im_config["http_timeout"])
+
+
+@pytest.fixture
+def drained_offline_http(im_config, offline_http):
+    """主账号的离线 HTTP 客户端,**先把积压清空**再交给用例。
+
+    离线拉取是 limit 窗口查询:队列积压 ≥ limit 时,用例新发的消息排在窗口外,
+    会稳定失败在「拉不到刚发的消息」——原因与被测逻辑无关,极易误判为服务端故障
+    (2026-08-29 实录:积压 100+ 导致全部离线用例连挂,一度怀疑 msg-job 落库坏了)。
+    故凡「发消息 → 离线拉」的用例都应经此 fixture 取客户端。
+    注意:drain 会 ack 掉存量消息(不可逆),仅限测试账号。"""
+    n = drain_single(offline_http, client_type=im_config["client_type_b"])
+    if n:
+        print(f"\n[drain] 清理主账号离线积压 {n} 条(避免积压把新消息挤出 limit 窗口)")
+    return offline_http
 
 
 @pytest.fixture

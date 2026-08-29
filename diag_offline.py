@@ -1,6 +1,6 @@
 """离线链路诊断:不发消息,直接裸拉,看离线库里到底有没有东西。
 
-用法:.venv\Scripts\python.exe diag_offline.py
+用法:.venv/Scripts/python.exe diag_offline.py(Windows 反斜杠亦可)
 读根 .env 的 IM_* 配置,只做只读拉取(不带 delivered → 不会 ack 标记已拉取)。
 """
 import os, sys

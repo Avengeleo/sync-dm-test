@@ -24,6 +24,7 @@ from im_test.client import (
     SINGLE_REACTION_DELIVER, SINGLE_DELIVER,
 )
 from im_test.http_offline import OfflineHttpClient
+from im_test.offline_drain import drain_single
 from im_test.tests.test_14_gate_channel import (
     CH_IOS_LISTING, CH_IOS_OVERSIGN,
     VER_LISTING_OK, VER_OVERSIGN_OLD,
@@ -118,8 +119,14 @@ def test_channel_reaction_old_oversign_blocked(im_config, logged_in_client, chan
 OFFLINE_CLIENT_TYPE = 0  # App 端作为离线端
 
 
-def _offline_http_as(im_config, app_version, channel_type):
-    """用指定「版本+渠道」登录一次刷新 Redis,断开后返回离线 HTTP 客户端。"""
+def _offline_http_as(im_config, app_version, channel_type, drain=False):
+    """用指定「版本+渠道」登录一次刷新 Redis,断开后返回离线 HTTP 客户端。
+
+    drain=True:先清空离线积压。离线拉取是 limit 窗口查询,积压 ≥ limit 时
+    新发的消息排在窗口外,用例会稳定失败在「拉不到」——与被测逻辑无关
+    (2026-08-29 实录)。发消息**之前**取客户端时要 drain,发完之后就别 drain 了
+    (会把刚发的也 ack 掉)。
+    """
     base = im_config.get("http_base")
     if not base:
         pytest.skip("未配置 IM_HTTP_BASE_URL,跳过离线用例")
@@ -134,8 +141,13 @@ def _offline_http_as(im_config, app_version, channel_type):
         c.close()
         pytest.skip(f"登录失败 nErr=0x{err:04x}")
     c.close()  # 断开=离线,但 Redis 里 app_version/channel_type 已是目标值
-    return OfflineHttpClient(base, im_config["token"], im_config["user_id"],
+    http = OfflineHttpClient(base, im_config["token"], im_config["user_id"],
                              im_config["http_timeout"])
+    if drain:
+        n = drain_single(http, client_type=OFFLINE_CLIENT_TYPE)
+        if n:
+            print(f"\n[drain] 清理离线积压 {n} 条")
+    return http
 
 
 def _pull_single(http, tries=3):
@@ -175,11 +187,13 @@ def test_offline_listing_gets_reaction(im_config, logged_in_client):
     这是 msg-srv 的 Mongo 查询条件层过滤(与在线是完全不同的代码路径),
     渠道参数若没传到,回应行会被 filter 掉 → 本用例红。
     """
+    # 先建客户端并清空积压,再发消息——否则积压会把新消息挤出 limit 窗口
+    http = _offline_http_as(im_config, VER_LISTING_OK, CH_IOS_LISTING, drain=True)
+
     a = logged_in_client
     react = a.send_reaction(to_id=a.user_id, parent_msg_id=uuid.uuid4().hex)
     assert react["errcode"] == NON_ERR
 
-    http = _offline_http_as(im_config, VER_LISTING_OK, CH_IOS_LISTING)
     hit, _ = _wait_row(http, react["sent_msg_id"])
     assert hit is not None, (
         "上架包 1.5.4 离线应能拉到回应行;拉不到=离线过滤仍在用超签门槛判上架包")
@@ -192,13 +206,14 @@ def test_offline_old_oversign_excluded_but_not_starved(im_config, logged_in_clie
 
     后半句是反饿死校验——被排除的行不能占 limit、不能卡游标。
     """
+    http = _offline_http_as(im_config, VER_OVERSIGN_OLD, CH_IOS_OVERSIGN, drain=True)
+
     a = logged_in_client
     react = a.send_reaction(to_id=a.user_id, parent_msg_id=uuid.uuid4().hex)
     assert react["errcode"] == NON_ERR
     normal = a.send_chat(to_id=a.user_id, content="[selftest] ch-off-" + uuid.uuid4().hex[:8])
     assert normal["errcode"] == NON_ERR
 
-    http = _offline_http_as(im_config, VER_OVERSIGN_OLD, CH_IOS_OVERSIGN)
     hit, rows = _wait_row(http, normal["sent_msg_id"])
     assert hit is not None, "普通消息应能拉到(证明拉取链路本身可用,且未被过滤行饿死)"
     assert hit["cmd_id"] == SINGLE_DELIVER
@@ -215,13 +230,15 @@ def test_offline_upgrade_backfill_across_channel(im_config, logged_in_client):
     老超签阶段排除的行,换上架包 1.5.4 身份(同样达标)后必须还在,
     否则就是消息永久丢失 —— 比"暂时看不到"严重得多。
     """
+    # 先以老超签身份建客户端并清空积压,再发消息
+    http_old = _offline_http_as(im_config, VER_OVERSIGN_OLD, CH_IOS_OVERSIGN, drain=True)
+
     a = logged_in_client
     react = a.send_reaction(to_id=a.user_id, parent_msg_id=uuid.uuid4().hex)
     assert react["errcode"] == NON_ERR
 
     # ① 老超签身份拉一轮:应拉不到
     time.sleep(2)
-    http_old = _offline_http_as(im_config, VER_OVERSIGN_OLD, CH_IOS_OVERSIGN)
     rows = _pull_single(http_old)
     assert not any(r["msg_id"] == react["sent_msg_id"] for r in rows), "老超签阶段不应拉到回应"
 
