@@ -125,13 +125,38 @@ def drained_offline_http(im_config, offline_http):
 @pytest.fixture
 def offline_http_b(im_config):
     """第二账号 B 的离线 HTTP 客户端(群/超级群离线:A 发、B 作离线收方拉取)。
-    未配 IM_HTTP_BASE_URL 或 IM_USER_ID2/IM_TOKEN2 则 skip。"""
+    未配 IM_HTTP_BASE_URL 或 IM_USER_ID2/IM_TOKEN2 则 skip。
+
+    ⚠️ 会先用 new_app_version 做一次 WS 登录再断开,给 B 建立「够版本」的身份。
+    原因:版本兼容门读的是 Redis 里登录时写入的 app_version/channel_type。
+    若 B 从未以该 clientType 登录过(换了 B 账号时很常见),门读不到版本 →
+    fail-closed 判老 → **离线回应行被过滤掉**,回应类用例(test_10/test_11)
+    会失败在「拉不到回应」,而普通消息用例(test_09)不过门照常通过——
+    这个差异极具误导性(2026-08-29 实录)。登录后立即断开,保证 B 处于离线态。"""
     base = im_config.get("http_base")
     if not base:
         pytest.skip("未配置 IM_HTTP_BASE_URL,跳过离线拉取用例")
     uid2, tok2 = im_config.get("user_id2"), im_config.get("token2")
     if not uid2 or not tok2:
         pytest.skip("未配置 IM_USER_ID2 / IM_TOKEN2(第二账号 B),跳过群/超级群离线用例")
+
+    # 建立 B 的版本身份(够版本,不应被门拦);失败不阻断——门读不到版本时按老版本处理,
+    # 用例仍会以「拉不到回应」失败,但至少不会因连接问题整组 skip 掉。
+    c = ImWsClient(im_config["url"], uid2, tok2,
+                   im_config["client_type_b"], im_config["timeout"],
+                   app_version=im_config["new_app_version"])
+    try:
+        c.connect()
+        if c.login() != NON_ERR:
+            print(f"\n[warn] B({uid2}) 登录失败,其 app_version 未刷新,回应类离线用例可能被版本门拦")
+    except Exception as e:
+        print(f"\n[warn] B({uid2}) 连接失败({e}),app_version 未刷新")
+    finally:
+        try:
+            c.close()  # 断开=离线,离线拉取的前提
+        except Exception:
+            pass
+
     return OfflineHttpClient(base, tok2, uid2, im_config["http_timeout"])
 
 

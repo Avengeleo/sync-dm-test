@@ -61,7 +61,13 @@ class OfflineHttpClient:
         return 200, proto_min.parse_group_msg_resp(r.content)
 
     def channel_offline_messages(self, chnn_id, count=50, direction=1):
-        """按游标拉超级群离线消息(服务端硬过滤 Normal,回应拉不到)。direction=1+空base→最新N条。返回 (code, [ChnnChat dict])。"""
+        """按游标拉超级群离线消息。direction=1+空base→最新N条。返回 (code, [ChnnChat dict])。
+
+        msgType 过滤:v2.21.2 起服务端放宽为 $in[Normal, 心情回应](im-common/dao/msg_dao/
+        channel_bson.go GetChannelFindKey),故**回应能拉到**;但拉取方若被版本兼容门判为
+        老客户端,会改用 GetChannelFindKeyNormalOnly 把回应排除——所以拉不到回应时,
+        先确认拉取方在 Redis 里的 app_version/channel_type 是否够版本。
+        (原注释"服务端硬过滤 Normal,回应拉不到"已过时,2026-08-29 核实订正。)"""
         body = proto_min.pull_chnn_message_req(self.user_id, chnn_id, direction=direction, count=count)
         r = self._post("/channel/v1/offlineMessages", body)
         if r.status_code != 200:
