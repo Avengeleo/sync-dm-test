@@ -26,18 +26,23 @@ def channel_id(im_config):
 
 
 def _pull_until(http_b, chnn_id, msg_id, timeout=45):
+    """轮询到出现目标 msg_id。返回 (命中行 or None, 最后一次的全量行) —— 第二个返回值
+    用于失败时报清楚「到底拉到了什么」:拉到 0 行 / 只拉到普通消息 / 拉到回应但 id 不匹配,
+    这三种情况的根因完全不同(成员或游标 / 版本门过滤 / 落库或时序)。"""
     deadline = time.time() + timeout
+    last = []
     while time.time() < deadline:
         try:
             code, rows = http_b.channel_offline_messages(chnn_id, count=100, direction=1)
         except requests.exceptions.RequestException:
             continue
         assert code == 200, f"超级群离线拉取 HTTP {code}(鉴权/域名?)"
+        last = rows
         hit = next((r for r in rows if r["msg_id"] == msg_id), None)
         if hit:
-            return hit
+            return hit, rows
         time.sleep(0.6)
-    return None
+    return None, last
 
 
 @pytest.mark.write
@@ -47,7 +52,17 @@ def test_channel_reaction_offline_pull(logged_in_client, offline_http_b, channel
     r = a.send_channel_reaction(channel_id, parent_msg_id=parent)
     assert r["errcode"] == NON_ERR, f"超级群回应上行未被接受 errcode=0x{r['errcode']:04x}"
 
-    hit = _pull_until(offline_http_b, channel_id, r["sent_msg_id"])
-    assert hit is not None, "B 未经 /channel/offlineMessages 拉到超级群回应(游标?B 是否频道成员/离线?)"
+    hit, rows = _pull_until(offline_http_b, channel_id, r["sent_msg_id"])
+    if hit is None:
+        kinds = {}
+        for x in rows:
+            kinds[x.get("event_type")] = kinds.get(x.get("event_type"), 0) + 1
+        raise AssertionError(
+            f"B 未经 /channel/offlineMessages 拉到超级群回应。"
+            f"本轮共拉到 {len(rows)} 行,eventType 分布 {kinds}(2=心情回应)。"
+            f"判读:0 行→B 非频道成员/游标不对;有行但无 eventType=2→"
+            f"回应被版本门过滤(查 B 在 Redis 的 app_version/channel_type)或未落库;"
+            f"有 eventType=2 但 msgId 对不上→落库时序,可加大 timeout。"
+            f"目标 msgId={r['sent_msg_id']}")
     assert hit["event_type"] == CHNN_EVENT_REACTION, f"超级群回应离线行 eventType 应为 2,实际 {hit['event_type']}"
     assert hit["parent_msg_id"] == parent, "超级群回应离线行 parentMsgId 应为被回应消息 id"
