@@ -39,13 +39,17 @@ RADIO_REACTION_DELIVER = 0x3213   # 超级群回应下行
 
 
 class ImWsClient:
-    def __init__(self, url, user_id, token, client_type=2, timeout=10, app_version=None):
+    def __init__(self, url, user_id, token, client_type=2, timeout=10, app_version=None,
+                 channel_type=None):
         self.url = url
         self.user_id = int(user_id)
         self.token = token
         # CMLogin.sVersionCode:版本兼容门用。None=不覆盖(走 proto_min 默认);
         # 传低版本(如 "2.20.0")即模拟老客户端,服务端应拒发新消息类型。
         self.app_version = app_version
+        # CMLogin.channelType:版本兼容门按渠道取门槛(上架系 1/3/2/4/6、超签 15/16,
+        # 编号同推送服务)。None=不上报,服务端读到 0 → 落通配档。
+        self.channel_type = channel_type
         self.client_type = client_type
         self.timeout = timeout
         self.ws = None
@@ -85,7 +89,8 @@ class ImWsClient:
     def login(self):
         """返回登录错误码(NON_ERR=0x8000 为成功)。"""
         self._send(CM_LOGIN, proto_min.cm_login(self.user_id, self.token, self.client_type,
-                                                app_version=self.app_version))
+                                                app_version=self.app_version,
+                                                channel_type=self.channel_type))
         f = proto_min.decode(self._recv_until(CM_LOGIN_ACK))
         return f.get(2, 0)  # CMLoginAck.nErr
 

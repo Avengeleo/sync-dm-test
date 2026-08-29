@@ -72,12 +72,18 @@ def decode(data):
 
 
 # ── 消息构造 ──
-def cm_login(user_id, token, client_type=2, device_token="web", app_version=None):
-    # CMLogin: sUserId=1 sLoginToken=2 sDeviceToken=3 sVersionCode=6 clientType=8
+def cm_login(user_id, token, client_type=2, device_token="web", app_version=None,
+             channel_type=None):
+    # CMLogin: sUserId=1 sLoginToken=2 sDeviceToken=3 sVersionCode=6 clientType=8 channelType=9
     body = _fv(1, int(user_id)) + _fs(2, token) + _fs(3, device_token)
     if app_version is not None:
         body += _fs(6, str(app_version))  # 版本兼容门:服务端按此判定新老客户端
-    return body + _fv(8, client_type)
+    body += _fv(8, client_type)
+    if channel_type is not None:
+        # 应用渠道,决定门槛取哪一档(上架系 1/3/2/4/6 与超签 15/16 版本号不是同一套)。
+        # 不传=不写该字段,服务端 Redis 取到 0 → 落通配门槛。
+        body += _fv(9, int(channel_type))
+    return body
 
 
 def mes_reaction_content(emoji, action=0):
