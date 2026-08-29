@@ -166,3 +166,46 @@ def test_same_version_differs_by_channel(im_config, logged_in_client):
                           "同一个 2.21.2 在超签渠道低于门槛 2.22.0,应拦截")
     finally:
         b2.close()
+
+
+# ══════════════════════════════════════════════════════════════════
+# 通配回退:未单独配置的渠道落 channel_type=0 那档(2.22.0)
+# ══════════════════════════════════════════════════════════════════
+
+CH_IOS_JSQ = 17      # jsq 渠道包,DB 未单独配置
+CH_UNREPORTED = None  # 客户端不上报 channelType → 服务端 Redis 取到 0
+
+
+@pytest.mark.write
+def test_unconfigured_channel_falls_back_to_wildcard(im_config, logged_in_client):
+    """jsq(17)未单独配置 → 落通配 2.22.0 → 1.5.4 被拦。
+
+    验证 lookupMinVersion 的「精确渠道 → 通配」回退次序。若回退写错成"放行",
+    未知渠道的老客户端会收到解析不了的消息。
+    """
+    b = _receiver(im_config, VER_LISTING_OK, CH_IOS_JSQ)
+    try:
+        _react_and_expect(logged_in_client, b, False,
+                          "jsq 渠道未配置,应落通配 2.22.0 → 1.5.4 被拦;收到了=回退次序写错成放行")
+    finally:
+        b.close()
+
+
+@pytest.mark.write
+def test_unreported_channel_falls_back_to_wildcard(im_config, logged_in_client):
+    """客户端不上报 channelType(旧客户端/异常)→ 服务端取 0 → 走通配档。
+
+    2.22.0 应放行、1.5.4 应拦截,证明"没有渠道信息时按最严的超签档判",不误放行。
+    """
+    b1 = _receiver(im_config, VER_OVERSIGN_OK, CH_UNREPORTED)
+    try:
+        _react_and_expect(logged_in_client, b1, True, "不上报渠道 + 2.22.0 应走通配放行")
+    finally:
+        b1.close()
+
+    b2 = _receiver(im_config, VER_LISTING_OK, CH_UNREPORTED)
+    try:
+        _react_and_expect(logged_in_client, b2, False,
+                          "不上报渠道 + 1.5.4 应走通配 2.22.0 被拦(不能因为没渠道就放行)")
+    finally:
+        b2.close()
