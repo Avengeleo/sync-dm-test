@@ -73,3 +73,37 @@ class OfflineHttpClient:
         if r.status_code != 200:
             return r.status_code, []
         return 200, proto_min.parse_chnn_message_resp(r.content)
+
+    # ── 引用原文回源(按 msgId 精确拉取)──
+    # 与上面的离线拉取端点语义不同:按 msgId 精确取,**不带 pulled 过滤、也不修改 pulled 标记**,
+    # 供客户端解析引用(parentMsgId)时本地读不到再回源。
+    # 设计文档:需求文档/引用原文回源/按msgId回源接口设计.md
+    # 三个方法统一返回 (status_code, msgs, missing);非 200 时后两项为空。
+
+    def group_msg_by_id(self, group_id, msg_ids, client_type=0):
+        """群聊按 msgId 回源。403=非该群成员;400=参数非法或超批量上限(20)。"""
+        body = proto_min.group_msg_by_id_req(group_id, msg_ids, client_type=client_type)
+        r = self._post("/offline/v1/group/msg/by_id", body)
+        if r.status_code != 200:
+            return r.status_code, [], []
+        p = proto_min.parse_group_msg_by_id_resp(r.content)
+        return 200, p["msgs"], p["missing"]
+
+    def chat_msg_by_id(self, msg_ids, client_type=0):
+        """单聊按 msgId 回源(查询恒带 owerId=调用者,天然隔离;覆盖收件与发件两份副本)。"""
+        body = proto_min.chat_msg_by_id_req(msg_ids, client_type=client_type)
+        r = self._post("/offline/v1/chat/msg/by_id", body)
+        if r.status_code != 200:
+            return r.status_code, [], []
+        p = proto_min.parse_chat_msg_by_id_resp(r.content)
+        return 200, p["msgs"], p["missing"]
+
+    def channel_msg_by_id(self, chnn_id, msg_ids, client_type=0):
+        """超级群按 msgId 回源。非频道成员被拒;定向消息(targetUsers)对非目标用户不可见。
+        注意该端点非 200 时网关统一回 400 并把错误放在 rsp.errcode(与其它 /channel/v1 端点一致)。"""
+        body = proto_min.chnn_msg_by_id_req(chnn_id, msg_ids, client_type=client_type)
+        r = self._post("/channel/v1/msg/by_id", body)
+        if r.status_code != 200:
+            return r.status_code, [], []
+        p = proto_min.parse_chnn_msg_by_id_resp(r.content)
+        return 200, p["msgs"], p["missing"]

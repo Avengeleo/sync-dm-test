@@ -302,3 +302,94 @@ def parse_chnn_message_resp(body):
             "parent_msg_id": _s(f.get(13, b"")), "event_type": f.get(17, 0),
         })
     return out
+
+
+# ── 引用原文回源(按 msgId 精确拉取)──
+# 端点:/offline/v1/group/msg/by_id、/offline/v1/chat/msg/by_id、/channel/v1/msg/by_id
+# 字段号读 im-common/proto/{groupsrv,msgsrv,channelpull} 核实。
+# 语义与离线拉取的关键差异:不带 pulled 过滤、且**不修改 pulled 标记**
+# (设计文档:需求文档/引用原文回源/按msgId回源接口设计.md)
+
+def group_msg_by_id_req(group_id, msg_ids, client_type=0):
+    """GetGroupMsgByIdReq: userId=1(网关用鉴权态覆盖,不发) groupId=2
+    msgIds=3(repeated string) clientType=4(uint32)。"""
+    out = _fv(2, int(group_id))
+    for m in msg_ids:
+        out += _fs(3, m)
+    return out + _fv(4, int(client_type))
+
+
+def chat_msg_by_id_req(msg_ids, client_type=0):
+    """GetChatMsgByIdReq: userId=1(网关覆盖) msgIds=2(repeated string) clientType=3(uint32)。"""
+    out = b""
+    for m in msg_ids:
+        out += _fs(2, m)
+    return out + _fv(3, int(client_type))
+
+
+def chnn_msg_by_id_req(chnn_id, msg_ids, client_type=0):
+    """PullChnnMsgByIdReq: sUserId=1(网关覆盖) sChnnId=2
+    lsMsgId=3(repeated string) clientType=4(uint32)。"""
+    out = _fv(2, int(chnn_id))
+    for m in msg_ids:
+        out += _fs(3, m)
+    return out + _fv(4, int(client_type))
+
+
+def _first_varint(fields, fn, default=0):
+    vals = fields.get(fn, [])
+    return vals[0] if vals else default
+
+
+def parse_group_msg_by_id_resp(body):
+    """GetGroupMsgByIdResp: code=1 msgList=2(repeated OfflineGroupMsg) missingMsgIds=3(repeated string)。
+    OfflineGroupMsg: cmdId=1 sMsgData=2 sMsgId=3 sFromId=4 sGroupId=5 msgTime=6
+                     isCancel=7 parentMsgId=8 isRead=9 botId=10 isEdit=11。
+    返回 {code, msgs:[...], missing:[msgId,...]}。"""
+    top = decode_all(body)
+    msgs = []
+    for raw in top.get(2, []):
+        f = decode(raw)
+        msgs.append({
+            "cmd_id": f.get(1, 0), "data": f.get(2, b""), "msg_id": _s(f.get(3, b"")),
+            "from_id": f.get(4, 0), "group_id": f.get(5, 0), "msg_time": f.get(6, 0),
+            "is_cancel": f.get(7, 0), "parent_msg_id": _s(f.get(8, b"")),
+            "is_read": f.get(9, 0), "is_edit": f.get(11, 0),
+        })
+    return {"code": _first_varint(top, 1), "msgs": msgs,
+            "missing": [_s(x) for x in top.get(3, [])]}
+
+
+def parse_chat_msg_by_id_resp(body):
+    """GetChatMsgByIdResp: code=1 msgList=2(repeated OfflineChatMsg) missingMsgIds=3。
+    OfflineChatMsg: cmdId=1 sMsgData=2 sMsgId=3 sFromId=4 sToId=5 msgTime=6
+                    isCancel=7 parentMsgId=8 isRead=9 isEdit=10。"""
+    top = decode_all(body)
+    msgs = []
+    for raw in top.get(2, []):
+        f = decode(raw)
+        msgs.append({
+            "cmd_id": f.get(1, 0), "data": f.get(2, b""), "msg_id": _s(f.get(3, b"")),
+            "from_id": f.get(4, 0), "to_id": f.get(5, 0), "msg_time": f.get(6, 0),
+            "is_cancel": f.get(7, 0), "parent_msg_id": _s(f.get(8, b"")),
+            "is_read": f.get(9, 0), "is_edit": f.get(10, 0),
+        })
+    return {"code": _first_varint(top, 1), "msgs": msgs,
+            "missing": [_s(x) for x in top.get(3, [])]}
+
+
+def parse_chnn_msg_by_id_resp(body):
+    """PullChnnMsgByIdRsp: errcode=1 lsMessage=2(repeated ChnnChat) lsMissingMsgId=3。
+    ChnnChat 字段同 parse_chnn_message_resp。"""
+    top = decode_all(body)
+    msgs = []
+    for raw in top.get(2, []):
+        f = decode(raw)
+        msgs.append({
+            "from_id": f.get(1, 0), "chnn_id": f.get(2, 0), "msg_id": _s(f.get(3, b"")),
+            "msg_time": f.get(4, 0), "encrypt": f.get(5, 0), "content": f.get(6, b""),
+            "index": _s(f.get(8, b"")), "is_cancel": f.get(11, 0),
+            "parent_msg_id": _s(f.get(13, b"")), "event_type": f.get(17, 0),
+        })
+    return {"code": _first_varint(top, 1), "msgs": msgs,
+            "missing": [_s(x) for x in top.get(3, [])]}
