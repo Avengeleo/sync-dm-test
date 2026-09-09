@@ -352,14 +352,15 @@ def test_channel_msg_by_id_over_limit(offline_http, channel_id, im_config):
 def test_channel_msg_by_id_non_member_forbidden(offline_http, channel_id, im_config):
     """🔴 越权防护:非频道成员不得按 msgId 回源该频道消息。
 
-    /channel/v1 家族的惯例是「非成功统一 HTTP 400,具体码放 body 的 errcode」,
-    故非成员(下游 errcode=403)在 HTTP 层表现为 400。
+    三条回源端点已统一为「HTTP 状态码即业务码」(不再沿用 /channel/v1 家族
+    「一律 400 + body errcode」的旧惯例——客户端传输层读不到非 2xx 的响应体),
+    故非成员应直接返回 403。
     必须同时断言「被拒」与「无数据」——只断言无数据的话,接口坏掉返回空也会通过。
     """
     foreign_channel = channel_id + 999_999_999
     code, msgs, _missing = offline_http.channel_msg_by_id(
         foreign_channel, [uuid.uuid4().hex], client_type=im_config["client_type"])
     assert not msgs, f"对非成员频道的回源不应返回数据(HTTP {code},返回 {len(msgs)} 条)"
-    assert code == 400, (
-        f"非频道成员应被拒(HTTP 400 + body errcode=403),实际 {code};"
-        "若为 200 说明网关又没透传下游业务错误码")
+    assert code == 403, (
+        f"非频道成员应被拒为 403,实际 {code};"
+        "200=网关没透传业务码,400=还在用旧的「一律 400」语义")

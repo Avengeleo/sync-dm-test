@@ -99,8 +99,9 @@ class OfflineHttpClient:
         return 200, p["msgs"], p["missing"]
 
     def channel_msg_by_id(self, chnn_id, msg_ids, client_type=0):
-        """超级群按 msgId 回源。非频道成员被拒;定向消息(targetUsers)对非目标用户不可见。
-        注意该端点非 200 时网关统一回 400 并把错误放在 rsp.errcode(与其它 /channel/v1 端点一致)。"""
+        """超级群按 msgId 回源。非频道成员被拒(403);定向消息(targetUsers)对非目标用户不可见。
+        错误码语义与群/单聊两条端点一致:HTTP 状态码即业务码
+        (400 参数错 / 401 鉴权失败 / 403 非成员 / 500 内部错)。"""
         body = proto_min.chnn_msg_by_id_req(chnn_id, msg_ids, client_type=client_type)
         r = self._post("/channel/v1/msg/by_id", body)
         if r.status_code != 200:
