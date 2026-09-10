@@ -432,10 +432,11 @@ def parse_sponsor_group_call(body):
             "msg_id": _s(f.get(3, b"")), "call_id": _s(f.get(5, b""))}
 
 
-def sig_sponsor_p2p_call(invite_id, from_id, msg_id, call_id, call_type=1):
-    """SIGSponsorCall: sInviteId=1 sFromId=2 sMsgId=3 callType=7 scallId=8。callType 1=voice。"""
+def sig_sponsor_p2p_call(invite_id, from_id, msg_id, call_id, call_type=1, content="selftest"):
+    """SIGSponsorCall: sInviteId=1 sFromId=2 sMsgId=3 sContent=6 callType=7 scallId=8。
+    sContent 服务端必填,空串会直接回 0x8202 ERR_CHAT_UNHEALTHY。"""
     return (_fv(1, int(invite_id)) + _fv(2, int(from_id)) + _fs(3, msg_id)
-            + _fv(7, int(call_type)) + _fs(8, call_id))
+            + _fs(6, content) + _fv(7, int(call_type)) + _fs(8, call_id))
 
 
 def sig_p2p_hangup(to_id, from_id, msg_id, call_id):

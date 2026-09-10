@@ -64,10 +64,12 @@ def _recv_group_call(peer, msg_id, timeout=AV_WAIT):
     return d
 
 
-def _pull_signal_until(http, client_type, msg_id, timeout=45):
+def _pull_signal_until(http, client_type, msg_id, timeout=45, keep_alive=None):
     deadline = time.time() + timeout
     last_code = None
     while time.time() < deadline:
+        if keep_alive is not None:
+            keep_alive.heartbeat()
         try:
             code, rows = http.offline_signal(client_type=client_type, limit=100)
         except requests.exceptions.RequestException:
@@ -149,7 +151,7 @@ def test_m7_three_ends_get_group_call(logged_in_client, peer_app_client, peer_pc
 # ── M2 webPulled 三档 ──
 
 @pytest.mark.write
-def test_m2_web_ack_does_not_eat_app_offline(logged_in_client, drained_signal_http_b, group_id,
+def test_m2_web_ack_does_not_eat_app_offline(drained_signal_http_b, logged_in_client, group_id,
                                              im_config):
     """M2:HTTP 用 clientType=2 拉到并 ack 后,clientType=0 仍能拉到同一条。
     旧逻辑 Web 走 pcPulled,办公双开会互相吞。"""
@@ -158,7 +160,7 @@ def test_m2_web_ack_does_not_eat_app_offline(logged_in_client, drained_signal_ht
     r = a.send_group_call(group_id, invite_ids=[int(im_config["user_id2"])])
     try:
         assert r["errcode"] == NON_ERR, f"群通话上行被拒 errcode=0x{r['errcode']:04x}"
-        web_hit = _pull_signal_until(http_b, 2, r["sent_msg_id"])
+        web_hit = _pull_signal_until(http_b, 2, r["sent_msg_id"], keep_alive=a)
         assert web_hit["cmd_id"] == SIG_GROUP_CALL_DELIVER, (
             f"Web 离线行应为 0x4104,实际 0x{web_hit['cmd_id']:04x}"
         )
@@ -166,7 +168,7 @@ def test_m2_web_ack_does_not_eat_app_offline(logged_in_client, drained_signal_ht
                                         delivered_ids=[r["sent_msg_id"]])
         assert code == 200, f"Web ack HTTP {code}"
 
-        app_hit = _pull_signal_until(http_b, 0, r["sent_msg_id"])
+        app_hit = _pull_signal_until(http_b, 0, r["sent_msg_id"], keep_alive=a)
         assert app_hit["cmd_id"] == SIG_GROUP_CALL_DELIVER
 
         code, web_again = http_b.offline_signal(client_type=2, limit=100)
@@ -188,8 +190,8 @@ def test_m3_mongo_index_and_backfill_ops_only():
 # ── M4 DELIVER ACK 路由 ──
 
 @pytest.mark.write
-def test_m4_hangup_disconnected_busy_ack_mark_pulled(logged_in_client, peer_web_client,
-                                                     drained_signal_http_b, group_id):
+def test_m4_hangup_disconnected_busy_ack_mark_pulled(drained_signal_http_b, logged_in_client,
+                                                     peer_web_client, group_id):
     """M4:挂断/断连/忙线三条 DELIVER ACK 必须进路由,否则 default 丢弃、离线队列清不掉。
     被叫 Web 在线收到下行后发 ACK(包体 userId 填自己),断开再拉,对应行应已被标记。"""
     a, b = logged_in_client, peer_web_client
@@ -218,8 +220,10 @@ def test_m4_hangup_disconnected_busy_ack_mark_pulled(logged_in_client, peer_web_
                                  body_user_id=b.user_id)
 
         time.sleep(1.5)  # ACK 落库是 goroutine
+        a.heartbeat()
         b.close()
         time.sleep(0.4)
+        a.heartbeat()
         code, rows = http_b.offline_signal(client_type=2, limit=100)
         assert code == 200
         leftover = {row["msg_id"] for row in rows} & {
@@ -234,8 +238,8 @@ def test_m4_hangup_disconnected_busy_ack_mark_pulled(logged_in_client, peer_web_
 # ── M5 ACK 用 FromUserId ──
 
 @pytest.mark.write
-def test_m5_deliver_ack_ignores_body_user_id(logged_in_client, peer_web_client,
-                                             drained_signal_http_b, group_id):
+def test_m5_deliver_ack_ignores_body_user_id(drained_signal_http_b, logged_in_client,
+                                             peer_web_client, group_id):
     """M5:DELIVER ACK 包体 userId 填 0,仍应按网关注入的登录 uid 标记 B 的 webPulled。"""
     a, b = logged_in_client, peer_web_client
     http_b = drained_signal_http_b
@@ -245,8 +249,10 @@ def test_m5_deliver_ack_ignores_body_user_id(logged_in_client, peer_web_client,
         _recv_group_call(b, r["sent_msg_id"])
         b.send_group_deliver_ack(SIG_GROUP_CALL_DELIVER_ACK, r["sent_msg_id"], body_user_id=0)
         time.sleep(1.5)
+        a.heartbeat()
         b.close()
         time.sleep(0.4)
+        a.heartbeat()
         code, rows = http_b.offline_signal(client_type=2, limit=100)
         assert code == 200
         assert all(row["msg_id"] != r["sent_msg_id"] for row in rows), (

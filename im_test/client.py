@@ -191,6 +191,13 @@ class ImWsClient:
         """发一帧不等 ACK(deliver ACK 服务端 Command=0,网关不回包)。"""
         self._send(cmd, body)
 
+    def heartbeat(self):
+        """网关 WebSocket 60s 无上行会踢连接。长等待(离线拉)期间要打一拍。"""
+        try:
+            self._send(HEARTBEAT, b"")
+        except Exception:
+            pass
+
     def send_p2p_call(self, invite_id, call_type=1):
         """发起私聊语音(0x4001)。返回 {errcode, sent_msg_id, call_id}。"""
         msg_id = uuid.uuid4().hex
