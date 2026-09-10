@@ -13,7 +13,7 @@ import pytest
 
 from im_test.client import ImWsClient, NON_ERR
 from im_test.http_offline import OfflineHttpClient
-from im_test.offline_drain import drain_single
+from im_test.offline_drain import drain_single, drain_signal
 
 
 def _clean(key):
@@ -201,3 +201,64 @@ def old_version_offline_http(im_config):
         pytest.skip(f"低版本登录失败 nErr=0x{err:04x}")
     c.close()  # 断开=离线,但 Redis 里 app_version 已是低版本
     yield OfflineHttpClient(base, im_config["token"], im_config["user_id"], im_config["http_timeout"])
+
+
+def _login_peer(im_config, client_type, app_version=None):
+    """第二账号 B 的一条 WS 连接。群通话扇出跳过发起人,被叫必须是另一个群成员。"""
+    uid2, tok2 = im_config.get("user_id2"), im_config.get("token2")
+    if not uid2 or not tok2:
+        pytest.skip("未配置 IM_USER_ID2 / IM_TOKEN2(群音视频被叫),跳过")
+    ver = im_config["new_app_version"] if app_version is None else app_version
+    c = ImWsClient(im_config["url"], uid2, tok2, client_type, im_config["timeout"],
+                   app_version=ver)
+    try:
+        c.connect()
+    except Exception as e:
+        pytest.skip(f"被叫 B(clientType={client_type}) 连接失败:{e}")
+    err = c.login()
+    if err != NON_ERR:
+        c.close()
+        pytest.skip(f"被叫 B(clientType={client_type}) 登录失败 nErr=0x{err:04x}")
+    return c
+
+
+@pytest.fixture
+def peer_web_client(im_config):
+    """被叫 B · Web(clientType=2)。"""
+    c = _login_peer(im_config, 2)
+    yield c
+    c.close()
+
+
+@pytest.fixture
+def peer_app_client(im_config):
+    """被叫 B · App(clientType=0)。"""
+    c = _login_peer(im_config, 0)
+    yield c
+    c.close()
+
+
+@pytest.fixture
+def peer_pc_client(im_config):
+    """被叫 B · PC(clientType=1)。"""
+    c = _login_peer(im_config, 1)
+    yield c
+    c.close()
+
+
+@pytest.fixture
+def old_peer_web_client(im_config):
+    """被叫 B · Web 低版本登录。音视频 cmd 不应被版本门拦住。"""
+    c = _login_peer(im_config, 2, app_version=im_config["old_app_version"])
+    yield c
+    c.close()
+
+
+@pytest.fixture
+def drained_signal_http_b(im_config, offline_http_b):
+    """B 的离线 HTTP,先把 App/PC/Web 三条音视频队列清空,避免积压把新信令挤出窗口。"""
+    for ct, name in ((0, "App"), (1, "PC"), (2, "Web")):
+        n = drain_signal(offline_http_b, client_type=ct)
+        if n:
+            print(f"\n[drain] 清理 B 音视频离线 {name}(clientType={ct}) {n} 条")
+    return offline_http_b

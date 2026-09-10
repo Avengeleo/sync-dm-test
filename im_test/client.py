@@ -37,6 +37,35 @@ RADIO_CHAT_ACK = 0x3002
 RADIO_DELIVER = 0x3004            # 超级群普通下行
 RADIO_REACTION_DELIVER = 0x3213   # 超级群回应下行
 
+# 私聊音视频(对照:Web 扇出本来就有)
+SIG_P2P_CALL = 0x4001
+SIG_P2P_CALL_ACK = 0x4002
+SIG_P2P_CALL_DELIVER = 0x4004     # 0x4004 私聊来电下行
+SIG_P2P_HANGUP = 0x400d
+SIG_P2P_HANGUP_ACK = 0x400e
+
+# 群通话信令(M1–M7)
+SIG_GROUP_CALL = 0x4101
+SIG_GROUP_CALL_ACK = 0x4102
+SIG_GROUP_CALL_DELIVER_ACK = 0x4103
+SIG_GROUP_CALL_DELIVER = 0x4104   # 0x4104 群开场来电
+SIG_GROUP_JOIN = 0x4109
+SIG_GROUP_JOIN_DELIVER = 0x410c   # 0x410c 群会中拉人
+SIG_GROUP_HANGUP = 0x410d
+SIG_GROUP_HANGUP_ACK = 0x410e
+SIG_GROUP_HANGUP_DELIVER_ACK = 0x410f  # M4 补路由
+SIG_GROUP_HANGUP_DELIVER = 0x4110
+SIG_GROUP_FINISH = 0x4111
+SIG_GROUP_FINISH_ACK = 0x4112
+SIG_GROUP_DISCONNECTED = 0x4119
+SIG_GROUP_DISCONNECTED_ACK = 0x411a
+SIG_GROUP_DISCONNECTED_DELIVER_ACK = 0x411b  # M4 补路由
+SIG_GROUP_DISCONNECTED_DELIVER = 0x411c
+SIG_GROUP_BUSY = 0x411d
+SIG_GROUP_BUSY_ACK = 0x411e
+SIG_GROUP_BUSY_DELIVER_ACK = 0x411f          # M4 补路由
+SIG_GROUP_BUSY_DELIVER = 0x4120
+
 
 class ImWsClient:
     def __init__(self, url, user_id, token, client_type=2, timeout=10, app_version=None,
@@ -157,6 +186,66 @@ class ImWsClient:
         """收方视角:读到目标下行 deliver 帧(0x1004/0x122d/0x2004/0x2314/0x3004/0x3213),
         返回原始 body(用 proto_min.parse_*_deliver 解析)。超时抛 TimeoutError。"""
         return self._recv_until(cmd, timeout)
+
+    def send_no_ack(self, cmd, body):
+        """发一帧不等 ACK(deliver ACK 服务端 Command=0,网关不回包)。"""
+        self._send(cmd, body)
+
+    def send_p2p_call(self, invite_id, call_type=1):
+        """发起私聊语音(0x4001)。返回 {errcode, sent_msg_id, call_id}。"""
+        msg_id = uuid.uuid4().hex
+        call_id = uuid.uuid4().hex
+        body = proto_min.sig_sponsor_p2p_call(invite_id, self.user_id, msg_id, call_id, call_type)
+        self._send(SIG_P2P_CALL, body)
+        ack = proto_min.parse_p2p_call_ack(self._recv_until(SIG_P2P_CALL_ACK))
+        return {"errcode": ack["errcode"], "sent_msg_id": msg_id, "call_id": call_id}
+
+    def send_p2p_hangup(self, to_id, call_id):
+        msg_id = uuid.uuid4().hex
+        body = proto_min.sig_p2p_hangup(to_id, self.user_id, msg_id, call_id)
+        self._send(SIG_P2P_HANGUP, body)
+        ack = proto_min.parse_p2p_call_ack(self._recv_until(SIG_P2P_HANGUP_ACK))
+        return {"errcode": ack["errcode"], "sent_msg_id": msg_id}
+
+    def send_group_call(self, group_id, invite_ids=None):
+        """发起群通话(0x4101)。返回 {errcode, sent_msg_id, call_id}。"""
+        msg_id = uuid.uuid4().hex
+        call_id = uuid.uuid4().hex
+        body = proto_min.sig_sponsor_group_call(
+            group_id, self.user_id, msg_id, call_id, invite_ids=invite_ids)
+        self._send(SIG_GROUP_CALL, body)
+        ack = proto_min.parse_group_call_ack(self._recv_until(SIG_GROUP_CALL_ACK))
+        return {"errcode": ack["errcode"], "sent_msg_id": msg_id, "call_id": call_id}
+
+    def send_group_call_finish(self, group_id, call_id, hangup=False):
+        """结束 0x4111;hangup=True 则发挂断 0x410d(结构相同)。"""
+        msg_id = uuid.uuid4().hex
+        cmd = SIG_GROUP_HANGUP if hangup else SIG_GROUP_FINISH
+        ack_cmd = SIG_GROUP_HANGUP_ACK if hangup else SIG_GROUP_FINISH_ACK
+        body = proto_min.sig_group_call_finish(group_id, self.user_id, msg_id, call_id)
+        self._send(cmd, body)
+        ack = proto_min.parse_group_call_ack(self._recv_until(ack_cmd))
+        return {"errcode": ack["errcode"], "sent_msg_id": msg_id}
+
+    def send_group_call_disconnected(self, group_id, call_id, users=None):
+        msg_id = uuid.uuid4().hex
+        body = proto_min.sig_group_call_disconnected(
+            group_id, self.user_id, msg_id, call_id, users=users)
+        self._send(SIG_GROUP_DISCONNECTED, body)
+        ack = proto_min.parse_group_call_ack(self._recv_until(SIG_GROUP_DISCONNECTED_ACK))
+        return {"errcode": ack["errcode"], "sent_msg_id": msg_id}
+
+    def send_group_call_busy(self, group_id, call_id, hint_user=0):
+        msg_id = uuid.uuid4().hex
+        body = proto_min.sig_group_call_busy(
+            group_id, self.user_id, msg_id, call_id, hint_user=hint_user)
+        self._send(SIG_GROUP_BUSY, body)
+        ack = proto_min.parse_group_call_ack(self._recv_until(SIG_GROUP_BUSY_ACK))
+        return {"errcode": ack["errcode"], "sent_msg_id": msg_id}
+
+    def send_group_deliver_ack(self, cmd, msg_id, body_user_id=0):
+        """群通话 DELIVER ACK。cmd 取 0x4103/0x410f/0x411b/0x411f。服务端不回包。"""
+        self.send_no_ack(cmd, proto_min.sig_group_call_deliver_ack(body_user_id, msg_id))
 
     def expect_no_deliver(self, cmd, timeout=6):
         """断言在 timeout 内**收不到**该下行(版本兼容门:老客户端不应收到新消息类型)。

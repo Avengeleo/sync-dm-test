@@ -108,3 +108,15 @@ class OfflineHttpClient:
             return r.status_code, [], []
         p = proto_min.parse_chnn_msg_by_id_resp(r.content)
         return 200, p["msgs"], p["missing"]
+
+    def offline_signal(self, client_type=2, limit=50, delivered_ids=None):
+        """拉音视频离线信令 POST /offline/v1/signal。
+        client_type 决定按 appPulled / pcPulled / webPulled 过滤(Web=2 走 webPulled $ne 1)。
+        delivered_ids 回带已拉取的 msgId,服务端据此 MarkPulled。
+        返回 (status_code, [OfflineSignalMsg dict])。"""
+        body = proto_min.offline_signal_req(self.user_id, client_type=client_type,
+                                            limit=limit, delivered_ids=delivered_ids)
+        r = self._post("/offline/v1/signal", body)
+        if r.status_code != 200:
+            return r.status_code, []
+        return 200, proto_min.parse_offline_signal_resp(r.content)

@@ -43,7 +43,8 @@ sync-dm-test/                 ← 打开这个为 PyCharm 项目根
 pytest                      # 全部套件
 pytest -m bi                # 只跑 bi 套件(靠目录自动标记)
 pytest -m dm_api            # 只跑 dm-api 套件
-pytest -m im                # 只跑 dm-im 心情回应(WebSocket,需 IM_* 配置)
+pytest -m im                # 只跑 dm-im 套件(WebSocket + 离线 HTTP,需 IM_* 配置)
+pytest im_test/tests/test_17_h5_group_av.py   # 只跑 H5 群音视频 M1–M7(需第二账号 IM_USER_ID2)
 pytest bi_api_test/         # 也可直接按目录跑
 pytest -m "bi and not write"   # bi 的只读用例(不写库,最安全)
 pytest -m "not s3"          # 跳过依赖 S3 的用例
@@ -58,6 +59,14 @@ pytest -m "not s3"          # 跳过依赖 S3 的用例
 - dm-api:`DM_API_BASE_URL`、`DM_API_APP_ID`/`DM_API_APP_SECRET`(查库 `sys_apps`)、`DM_API_WIPS`(Encversion 旁路值,跳过 AES)、`DM_API_TOKEN`(live 抓)。
 
 未配置的服务对应套件会整体 **skip**,不报错。
+
+**H5 群音视频(test_17, M1–M7)**:打的是 develop 上的 `signal-srv`。主叫 A 用 `IM_USER_ID`,被叫 B 必须另配 `IM_USER_ID2` / `IM_TOKEN2`,两人同在 `IM_GROUP_ID`。群通话扇出不会发给发起人自己,单账号双连接测不了这条。B 真机请先下线。云主机:
+
+```
+pytest im_test/tests/test_17_h5_group_av.py -v
+```
+
+M3(Mongo 索引/刷数)在套件里 skip,走发版文档,不在 pytest。
 
 **dm-api 三层鉴权说明**:用户接口在网关串了 AES 加密 + 签名 + token 三层。客户端的对付方式:
 ① 带 `Encversion=<WIPs值>` 头旁路 AES(body 走明文);② 每请求生成 nonce,把 `app_id+sign`

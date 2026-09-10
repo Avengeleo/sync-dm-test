@@ -378,6 +378,108 @@ def parse_chat_msg_by_id_resp(body):
             "missing": [_s(x) for x in top.get(3, [])]}
 
 
+# ── 音视频信令(群通话 M1–M7 / 私聊来电对照)──
+# 字段号读 im-common/proto/app/im.sig.proto + signal-srv/signalsrv.proto
+
+def sig_sponsor_group_call(group_id, user_id, msg_id, call_id, invite_ids=None, content=""):
+    """SIGSPonsorGroupCall: groupId=1 userId=2 msgId=3 callId=5 inviteIds=6(repeated) content=7。"""
+    out = (_fv(1, int(group_id)) + _fv(2, int(user_id)) + _fs(3, msg_id)
+           + _fs(5, call_id))
+    for uid in (invite_ids or []):
+        out += _fv(6, int(uid))
+    if content:
+        out += _fs(7, content)
+    return out
+
+
+def sig_group_call_finish(group_id, user_id, msg_id, call_id):
+    """SIGGroupCallFinish: 挂断 0x410d / 结束 0x4111 共用此结构。
+    groupId=1 userId=2 msgId=3 callId=5。"""
+    return (_fv(1, int(group_id)) + _fv(2, int(user_id)) + _fs(3, msg_id)
+            + _fs(5, call_id))
+
+
+def sig_group_call_disconnected(group_id, user_id, msg_id, call_id, users=None):
+    """SIGGroupCallDisconnected 0x4119: groupId=1 userId=2 msgId=3 users=4 callId=6。"""
+    out = _fv(1, int(group_id)) + _fv(2, int(user_id)) + _fs(3, msg_id)
+    for uid in (users or []):
+        out += _fv(4, int(uid))
+    return out + _fs(6, call_id)
+
+
+def sig_group_call_busy(group_id, user_id, msg_id, call_id, hint_user=0):
+    """SIGGroupCallBusy 0x411d: groupId=1 userId=2 msgId=3 hintUser=4 callId=6。"""
+    return (_fv(1, int(group_id)) + _fv(2, int(user_id)) + _fs(3, msg_id)
+            + _fv(4, int(hint_user)) + _fs(6, call_id))
+
+
+def sig_group_call_deliver_ack(user_id, msg_id):
+    """SIGGroupCallDeliverAck: userId=1 msgId=2。M5 可故意把 user_id 填错,验网关 FromUserId。"""
+    return _fv(1, int(user_id)) + _fs(2, msg_id)
+
+
+def parse_group_call_ack(body):
+    """SIGGroupCallAck: userId=1 msgId=2 errCode=3 msgTime=4。"""
+    f = decode(body)
+    return {"user_id": f.get(1, 0), "msg_id": _s(f.get(2, b"")),
+            "errcode": f.get(3, 0), "msg_time": f.get(4, 0)}
+
+
+def parse_sponsor_group_call(body):
+    """SIGSPonsorGroupCall 下行 0x4104。"""
+    f = decode(body)
+    return {"group_id": f.get(1, 0), "user_id": f.get(2, 0),
+            "msg_id": _s(f.get(3, b"")), "call_id": _s(f.get(5, b""))}
+
+
+def sig_sponsor_p2p_call(invite_id, from_id, msg_id, call_id, call_type=1):
+    """SIGSponsorCall: sInviteId=1 sFromId=2 sMsgId=3 callType=7 scallId=8。callType 1=voice。"""
+    return (_fv(1, int(invite_id)) + _fv(2, int(from_id)) + _fs(3, msg_id)
+            + _fv(7, int(call_type)) + _fs(8, call_id))
+
+
+def sig_p2p_hangup(to_id, from_id, msg_id, call_id):
+    """SIGHangUp: sToId=1 sFromId=2 sMsgId=3 scallId=5。"""
+    return (_fv(1, int(to_id)) + _fv(2, int(from_id)) + _fs(3, msg_id)
+            + _fs(5, call_id))
+
+
+def parse_p2p_call(body):
+    """SIGSponsorCall 下行 0x4004。"""
+    f = decode(body)
+    return {"invite_id": f.get(1, 0), "from_id": f.get(2, 0),
+            "msg_id": _s(f.get(3, b"")), "call_id": _s(f.get(8, b""))}
+
+
+def parse_p2p_call_ack(body):
+    """SIGSponsorCallAck: sToId=1 sMsgId=2 errcode=3。"""
+    f = decode(body)
+    return {"to_id": f.get(1, 0), "msg_id": _s(f.get(2, b"")), "errcode": f.get(3, 0)}
+
+
+def offline_signal_req(user_id, client_type=2, limit=50, delivered_ids=None):
+    """OfflineSignalMsgReq: userId=1 deliveredMsgIds=3(repeated string) limit=4 clientType=5。
+    网关会覆盖 userId,但仍带上与离线聊天请求同形。"""
+    out = _fv(1, int(user_id))
+    for mid in (delivered_ids or []):
+        out += _fs(3, mid)
+    return out + _fv(4, int(limit)) + _fv(5, int(client_type))
+
+
+def parse_offline_signal_resp(body):
+    """OfflineSignalMsgResp.msgList=3。OfflineSignalMsg: cmdId=1 sMsgData=2 sMsgId=3
+    sFromId=4 sToId=5 msgTime=6 callId=7 status=8。"""
+    out = []
+    for raw in decode_all(body).get(3, []):
+        f = decode(raw)
+        out.append({
+            "cmd_id": f.get(1, 0), "data": f.get(2, b""), "msg_id": _s(f.get(3, b"")),
+            "from_id": f.get(4, 0), "to_id": f.get(5, 0), "msg_time": f.get(6, 0),
+            "call_id": _s(f.get(7, b"")), "status": f.get(8, 0),
+        })
+    return out
+
+
 def parse_chnn_msg_by_id_resp(body):
     """PullChnnMsgByIdRsp: errcode=1 lsMessage=2(repeated ChnnChat) lsMissingMsgId=3。
     ChnnChat 字段同 parse_chnn_message_resp。"""

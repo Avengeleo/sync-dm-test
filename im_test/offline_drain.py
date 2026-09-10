@@ -33,3 +33,21 @@ def drain_single(http, client_type=0, batch=100, max_rounds=50):
     raise AssertionError(
         f"drain 超过 {max_rounds} 轮仍未清空(已 ack {total} 条),"
         f"疑似 ack 未生效或有其它来源持续写入")
+
+
+def drain_signal(http, client_type=2, batch=100, max_rounds=50):
+    """清空音视频离线队列(/offline/v1/signal),返回被 ack 掉的条数。"""
+    total = 0
+    for _ in range(max_rounds):
+        code, rows = http.offline_signal(client_type=client_type, limit=batch)
+        if code != 200:
+            raise AssertionError(f"drain signal 拉取失败 HTTP {code}")
+        if not rows:
+            return total
+        ids = [r["msg_id"] for r in rows if r.get("msg_id")]
+        code, _ = http.offline_signal(client_type=client_type, limit=batch, delivered_ids=ids)
+        if code != 200:
+            raise AssertionError(f"drain signal ack 失败 HTTP {code}")
+        total += len(rows)
+    raise AssertionError(
+        f"drain signal 超过 {max_rounds} 轮仍未清空(已 ack {total} 条)")
