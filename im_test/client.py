@@ -69,10 +69,11 @@ SIG_GROUP_BUSY_DELIVER = 0x4120
 
 class ImWsClient:
     def __init__(self, url, user_id, token, client_type=2, timeout=10, app_version=None,
-                 channel_type=None):
+                 channel_type=None, device_token="web"):
         self.url = url
         self.user_id = int(user_id)
         self.token = token
+        self.device_token = device_token
         # CMLogin.sVersionCode:版本兼容门用。None=不覆盖(走 proto_min 默认);
         # 传低版本(如 "2.20.0")即模拟老客户端,服务端应拒发新消息类型。
         self.app_version = app_version
@@ -118,6 +119,7 @@ class ImWsClient:
     def login(self):
         """返回登录错误码(NON_ERR=0x8000 为成功)。"""
         self._send(CM_LOGIN, proto_min.cm_login(self.user_id, self.token, self.client_type,
+                                                device_token=self.device_token,
                                                 app_version=self.app_version,
                                                 channel_type=self.channel_type))
         f = proto_min.decode(self._recv_until(CM_LOGIN_ACK))

@@ -25,6 +25,9 @@ def _md5(s):
 
 
 class DmApiClient(BaseClient):
+    # 端类型与 api-common/constant 一致:0=App 1=PC 2=Web
+    CLIENT_APP, CLIENT_PC, CLIENT_WEB = "0", "1", "2"
+
     # 真实 App(H5)请求头,防止其它中间件按这些头做校验(值取自抓包,非密钥)
     DEFAULT_APP_HEADERS = {
         "app_version": "1.8.2",
@@ -61,8 +64,12 @@ class DmApiClient(BaseClient):
         secret = _md5(self.app_secret + nonce)
         return _md5(_md5(concat) + secret).upper()
 
-    def call(self, subpath, body=None):
-        """打一个 dm-api 用户接口。subpath 如 '/user/switch/list'。body=业务 JSON。"""
+    def call(self, subpath, body=None, token=None, extra_headers=None):
+        """打一个 dm-api 用户接口。subpath 如 '/user/switch/list'。body=业务 JSON。
+
+        token=None 用构造时的会话 token;传 "" 则不带头(测未登录)。
+        extra_headers 覆盖/删除请求头:值为 None 时按大小写不敏感删掉该头。
+        """
         nonce = uuid.uuid4().hex
         query = {"app_id": self.app_id}
         sign = self._sign(query, nonce)
@@ -70,9 +77,19 @@ class DmApiClient(BaseClient):
         headers.update({
             "Encversion": self.wips,     # 旁路 AES(=WIPs 值则 aes.go:32 跳过加解密)
             "Content-ETag": nonce,       # 签名 nonce
-            "token": self.token,         # 会话 token
             "Content-Type": "application/json",
         })
+        tok = self.token if token is None else token
+        if tok:
+            headers["token"] = tok
+        if extra_headers:
+            for hk, hv in extra_headers.items():
+                if hv is None:
+                    for existing in list(headers):
+                        if existing.lower() == str(hk).lower():
+                            headers.pop(existing, None)
+                else:
+                    headers[hk] = hv
         for hk, hv in headers.items():  # HTTP 头须 ASCII;给清晰错误而非 latin-1 崩溃
             try:
                 str(hv).encode("latin-1")
@@ -84,6 +101,57 @@ class DmApiClient(BaseClient):
         url = f"{self.base_url}{self.prefix}{subpath}?app_id={self.app_id}&sign={sign}"
         resp = self.session.post(url, json=(body or {}), headers=headers, timeout=self.timeout)
         return self._wrap(resp)
+
+    def fork(self, token=None, client_type=None):
+        """浅拷贝一个客户端,可换会话 token / Client-type(扫码登录后用 PC token 打后续接口)。"""
+        headers = dict(self.app_headers)
+        if client_type is not None:
+            headers["client-type"] = str(client_type)
+        return DmApiClient(
+            self.base_url, self.app_id, self.app_secret,
+            self.token if token is None else token,
+            self.wips, prefix=self.prefix, timeout=self.timeout,
+            app_headers=headers,
+        )
+
+    # ── PC/Web 扫码登录(user-srv LoginScanCode / GetScanCodeResult / AppAllowLogin)──
+    # HTTP 头 Client-type 决定写入 Redis 的对端类型;
+    # allow_code_login 的 body.client_type 是 App 回传的被授权端。
+    def login_scan_code(self, code_key, device_token, device_info="pytest-pc",
+                        device_name="pytest PC scan", app_version="1.0.0",
+                        os_version="Windows-10", channel_type="1", client_type=None):
+        """PC/Web 注册待扫码会话。client_type 默认 PC=1,写入 Redis TTL=180s。只验 Sign。"""
+        ct = self.CLIENT_PC if client_type is None else str(client_type)
+        return self.call("/user/login/scan_code", {
+            "code_key": code_key,
+            "device_info": device_info,
+            "device_name": device_name,
+            "device_token": device_token,
+            "app_version": app_version,
+            "os_version": os_version,
+            "channel_type": channel_type,
+        }, extra_headers={"client-type": ct})
+
+    def get_scan_code(self, code_key):
+        """PC/Web 轮询授权结果。200+token / 1027 等待 / 1026 失效。只验 Sign。"""
+        return self.call("/user/login/get_scan_code", {"code_key": code_key})
+
+    def get_scan_code_info(self, code_key):
+        """App 扫码后查看对端设备。需 Token。不写「已扫码」态。"""
+        return self.call("/user/login/get_scan_code_info", {"code_key": code_key})
+
+    def allow_code_login(self, code_key, client_type=None, sync_offline_msg_flag="0"):
+        """App 确认授权对端登录。需 Token。会跨端踢线(豁免被授权端+App)。"""
+        ct = self.CLIENT_PC if client_type is None else str(client_type)
+        return self.call("/user/login/allow_code_login", {
+            "code_key": code_key,
+            "client_type": ct,
+            "sync_offline_msg_flag": str(sync_offline_msg_flag),
+        })
+
+    def info_get(self):
+        """用当前 token 换用户资料(扫码结果不含 user_id,连 IM 前必须先打这条)。"""
+        return self.call("/user/info/get")
 
     # ── 聊天设置 ──
     def switch_list(self):

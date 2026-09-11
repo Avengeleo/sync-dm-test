@@ -19,10 +19,10 @@ sync-dm-test/                 ← 打开这个为 PyCharm 项目根
 │   ├── conftest.py           #   bi fixtures(client / draft_pack / 载荷工厂)
 │   ├── check_conn.py         #   连通+登录自检
 │   └── tests/                #   test_00_auth … test_06_tray_icon
-└── dm_api_test/              # ✅ dm-api 套件(16 用例:聊天设置/我的最爱/贴图读)
+└── dm_api_test/              # ✅ dm-api 套件(聊天设置/我的最爱/贴图读/PC 扫码登录)
     ├── client.py             #   DmApiClient:三层鉴权(AES旁路 Encversion + 签名 + token)
     ├── conftest.py           #   dm fixtures(dm_client / fav_cleaner)
-    └── tests/                #   test_00_smoke(鉴权链路)… test_03_sticker_read
+    └── tests/                #   test_00_smoke … test_08_pc_scan_login
 └── im_test/                 # ✅ dm-im 长连接套件(心情回应,WebSocket)
     ├── frame.py / proto_min.py  #   帧编解码 + 极简 protobuf(不引 protoc)
     ├── client.py             #   ImWsClient:连WS+CM_LOGIN+发回应+收ACK(自反应免好友)
@@ -45,6 +45,7 @@ pytest -m bi                # 只跑 bi 套件(靠目录自动标记)
 pytest -m dm_api            # 只跑 dm-api 套件
 pytest -m im                # 只跑 dm-im 套件(WebSocket + 离线 HTTP,需 IM_* 配置)
 pytest im_test/tests/test_17_h5_group_av.py   # 只跑 H5 群音视频 M1–M7(需第二账号 IM_USER_ID2)
+pytest dm_api_test/tests/test_08_pc_scan_login.py  # PC 扫码登录(dev);happy path 会踢 Web/同端旧 PC
 pytest bi_api_test/         # 也可直接按目录跑
 pytest -m "bi and not write"   # bi 的只读用例(不写库,最安全)
 pytest -m "not s3"          # 跳过依赖 S3 的用例
@@ -67,6 +68,14 @@ pytest im_test/tests/test_17_h5_group_av.py -v
 ```
 
 M3(Mongo 索引/刷数)在套件里 skip,走发版文档,不在 pytest。
+
+**PC 扫码登录(test_08)**:模拟 PC 注册二维码会话 + 当前账号授权 + 轮询拿 token。
+happy path 标了 `write`:会跨端踢 Web、Kick 该账号当前 PC 设备。请单独跑,不要夹在整包 `pytest -m dm_api` 中间(若 `DM_API_TOKEN` 是 H5/Web 会话,测完会 501,需重抓)。配了 `IM_WS_URL` 时还会用扫到的 token 打一条 `clientType=1` 的 CMLogin。
+
+```
+pytest dm_api_test/tests/test_08_pc_scan_login.py -v
+pytest dm_api_test/tests/test_08_pc_scan_login.py -v -m "not write"
+```
 
 **dm-api 三层鉴权说明**:用户接口在网关串了 AES 加密 + 签名 + token 三层。客户端的对付方式:
 ① 带 `Encversion=<WIPs值>` 头旁路 AES(body 走明文);② 每请求生成 nonce,把 `app_id+sign`
