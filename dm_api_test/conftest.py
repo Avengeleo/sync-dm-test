@@ -6,8 +6,9 @@
   DM_API_APP_ID     sys_apps 表里一条 is_enabled=1 的 app_id
   DM_API_APP_SECRET 该 app_id 对应的 app_secrect(库查)
   DM_API_WIPS       Encversion 旁路值(跳过 AES;配置/运维取,或抓真实请求的 Encversion 头)
-  DM_API_TOKEN      一个有效用户会话 token(live 抓,如 H5 devtools)
-  DM_API_CLIENT_TYPE 可选,部分接口要 Client-type(1=app/2=pc/3=web)
+  DM_API_TOKEN      一个有效用户会话 token(live 抓,如 H5/App devtools)
+  DM_API_TOKEN_EMAIL 可选,邮箱注册账号的另一枚 token;配了才跑邮箱扫码授权用例
+  DM_API_CLIENT_TYPE 可选。取值与后端一致:0=App 1=PC 2=Web(不是 1/2/3)
 """
 
 import os
@@ -77,6 +78,23 @@ def authed_client(dm_client):
             f"对照 test_00_smoke:1020/1021=AES,1006/1007=签名,401=token。"
         )
     return dm_client
+
+
+@pytest.fixture
+def email_authed_client(dm_client):
+    """邮箱注册账号的会话。未配 DM_API_TOKEN_EMAIL 则 skip。会踢该邮箱账号的 Web 端。"""
+    tok = _clean("DM_API_TOKEN_EMAIL")
+    if not tok:
+        pytest.skip("未配置 DM_API_TOKEN_EMAIL(邮箱注册账号的 H5/App token),跳过邮箱扫码用例")
+    c = dm_client.fork(token=tok)
+    env = c.switch_list()
+    if env.code in (401, 501):
+        pytest.skip(
+            f"DM_API_TOKEN_EMAIL 已失效 code={env.code} msg={env.msg!r},请重抓邮箱账号 token"
+        )
+    if env.code != 200:
+        pytest.skip(f"邮箱账号鉴权失败 code={env.code} msg={env.msg!r}")
+    return c
 
 
 @pytest.fixture

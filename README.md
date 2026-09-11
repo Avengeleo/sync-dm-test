@@ -19,11 +19,12 @@ sync-dm-test/                 ← 打开这个为 PyCharm 项目根
 │   ├── conftest.py           #   bi fixtures(client / draft_pack / 载荷工厂)
 │   ├── check_conn.py         #   连通+登录自检
 │   └── tests/                #   test_00_auth … test_06_tray_icon
-└── dm_api_test/              # ✅ dm-api 套件(聊天设置/我的最爱/贴图读/PC 扫码登录)
-    ├── client.py             #   DmApiClient:三层鉴权(AES旁路 Encversion + 签名 + token)
-    ├── conftest.py           #   dm fixtures(dm_client / fav_cleaner)
-    └── tests/                #   test_00_smoke … test_08_pc_scan_login
-└── im_test/                 # ✅ dm-im 长连接套件(心情回应,WebSocket)
+├── dm_api_test/              # ✅ dm-api 套件(聊天设置/我的最爱/贴图读/PC 扫码登录)
+│   ├── client.py             #   DmApiClient:三层鉴权(AES旁路 Encversion + 签名 + token)
+│   ├── scan_login.py         #   扫码共享步骤(注册码/轮询/授权/资料断言)
+│   ├── conftest.py           #   dm fixtures(dm_client / authed_client)
+│   └── tests/                #   test_00_smoke … test_09_pc_scan_login_write
+└── im_test/                  # ✅ dm-im 长连接套件(心情回应,WebSocket)
     ├── frame.py / proto_min.py  #   帧编解码 + 极简 protobuf(不引 protoc)
     ├── client.py             #   ImWsClient:连WS+CM_LOGIN+发回应+收ACK(自反应免好友)
     └── tests/                #   test_00_login … test_01_reaction
@@ -70,14 +71,15 @@ pytest im_test/tests/test_17_h5_group_av.py -v
 
 M3(Mongo 索引/刷数)在套件里 skip,走发版文档,不在 pytest。
 
-**PC 扫码登录(test_08 / test_09)**:test_08 只注册会话和校验错误码,可反复跑。
-test_09 才走 App 授权,会跨端踢 Web——若 `DM_API_TOKEN` 是 H5 会话,测完会 `501 登录重置`,必须重抓 token。
-建议 `DM_API_TOKEN` 用 App 端 token,或把 test_09 单独跑、跑完就去重抓。
+**PC 扫码登录(test_08 / test_09)**:只覆盖服务端契约(注册码 → 授权 → 轮询 token → `/user/info/get` → 可选 IM `CMLogin`),不测原生 PC 画码/扫码解析。
+test_08 只读,可反复跑。test_09 才授权,会跨端踢 Web——`DM_API_TOKEN` 若是 H5 会话,测完会 `501`,必须重抓。
+建议用 App 端 token,或把 test_09 单独跑。`happy_path` 用当前 token,手机/邮箱/账号密码注册都可以;`register_type=3` 允许 email/mobile 为空。
 
 ```
 pytest dm_api_test/tests/test_00_smoke.py -v
 pytest dm_api_test/tests/test_08_pc_scan_login.py -v
 pytest dm_api_test/tests/test_09_pc_scan_login_write.py -v -s
+# 邮箱账号: .env 加 DM_API_TOKEN_EMAIL 后再跑上一行,会多测一条
 ```
 
 **dm-api 三层鉴权说明**:用户接口在网关串了 AES 加密 + 签名 + token 三层。客户端的对付方式:
