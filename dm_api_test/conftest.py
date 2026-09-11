@@ -62,6 +62,24 @@ def dm_client(dm_config):
 
 
 @pytest.fixture
+def authed_client(dm_client):
+    """需要登录态的用例。401=token 过期,501=登录重置(扫码授权 PC 会踢掉 Web/H5 会话)。"""
+    env = dm_client.switch_list()
+    if env.code in (401, 501):
+        pytest.skip(
+            f"DM_API_TOKEN 已失效 code={env.code} msg={env.msg!r}。"
+            f"从 H5/App 重抓请求头 token 写入 .env。"
+            f"401=过期;501=被踢——刚跑过 test_09 授权 PC 就会把当前 H5/Web token 踢掉。"
+        )
+    if env.code != 200:
+        pytest.skip(
+            f"鉴权探测失败 code={env.code} msg={env.msg!r}。"
+            f"对照 test_00_smoke:1020/1021=AES,1006/1007=签名,401=token。"
+        )
+    return dm_client
+
+
+@pytest.fixture
 def fav_cleaner(dm_client):
     """记录本用例添加的收藏,结束时批量删除,避免污染该用户真实收藏。"""
     added = []  # [{"fav_type","pack_id","img_url"}]
