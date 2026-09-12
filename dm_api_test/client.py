@@ -15,6 +15,7 @@ dm-api 用户接口在网关串了三层,自测逐一对付(全部读源码核�
 """
 
 import hashlib
+import json
 import uuid
 
 from common.http_client import BaseClient, Envelope
@@ -217,3 +218,34 @@ class DmApiClient(BaseClient):
         if sys_lang:
             body["sys_lang"] = sys_lang
         return self.call("/active/saas/activity/entry", body)
+
+    # ── 消息举报(问题复现用;服务端 sync-dm-api/user-srv/handler/handler_report.go)──
+    # 刻意做成"原样透传":messages / desc / user_id 都不在客户端侧做校验或纠正,
+    # 这样用例才能构造非法输入来复现服务端的处理缺陷。
+    def report_add(self, ctx_type, ctx_id, user_id, messages, desc=""):
+        """用户举报消息 POST /user/report/add。
+
+        messages:**原样字符串**。服务端按 JSON 数组解析(只取每项的 id 字段),
+        故意允许传非法值以复现「非法 JSON 被当成 500」的问题。
+        """
+        return self.call("/user/report/add", {
+            "ctx_type": str(ctx_type),
+            "ctx_id": str(ctx_id),
+            "user_id": str(user_id),
+            "messages": messages,
+            "desc": desc,
+        })
+
+    @staticmethod
+    def build_report_messages(msg_id=None, content="[selftest] report", content_type=1,
+                              logictype=0, ctx_type=1):
+        """拼 messages 字段。msg_id=None 时**故意不带 id 键**,用于复现空 id 去重问题。
+
+        字段形状取自 sync-dm-api/api-gateway/request/user/setReportRequest.go 的
+        ReportContent(该结构体在服务端其实未被使用,仅作契约说明)。
+        """
+        item = {"content_type": content_type, "content": content,
+                "logictype": logictype, "type": ctx_type}
+        if msg_id is not None:
+            item["id"] = msg_id
+        return json.dumps([item], ensure_ascii=False)
