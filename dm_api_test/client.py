@@ -222,6 +222,14 @@ class DmApiClient(BaseClient):
     # ── 消息举报(问题复现用;服务端 sync-dm-api/user-srv/handler/handler_report.go)──
     # 刻意做成"原样透传":messages / desc / user_id 都不在客户端侧做校验或纠正,
     # 这样用例才能构造非法输入来复现服务端的处理缺陷。
+    def report_add_raw(self, body):
+        """举报接口的**完全原样**调用:body 直接作为 JSON 请求体发出。
+
+        用于复现「客户端把 id 发成 JSON 数字」这类类型不匹配问题——
+        report_add() 会把参数 str() 化,那样就复现不出来了。
+        """
+        return self.call("/user/report/add", body)
+
     def report_add(self, ctx_type, ctx_id, user_id, messages, desc=""):
         """用户举报消息 POST /user/report/add。
 

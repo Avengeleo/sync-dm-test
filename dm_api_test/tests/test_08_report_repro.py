@@ -220,3 +220,44 @@ def test_08_non_numeric_user_id_silently_becomes_zero(dm_client, ctx_id):
     assert env.code != CODE_MISSING_PARAM, (
         f"【问题 3(b) 复现】user_id 传非数字被静默转成 0,最终报 1015「缺失必要的参数」,"
         f"掩盖了真实原因(格式错)。raw={env.raw!r}")
+
+
+# ─────── 问题 5:id 字段发成 JSON 数字 → 绑定失败 → 未检查断言 panic → 500 ───────
+# 这是 2026-09-12 生产事故(iOS,req-6368638B5D9F4346ADB7FDF66F9426FB)的真实成因,
+# 与前面 4 个问题都不是同一个:该请求的 messages 合法、id 存在、desc 是 9 个 ASCII 字符。
+# 根因:CreateReportParams 里 ctx_type/ctx_id/user_id 声明为 string,iOS 发的是数字,
+#      encoding/json 不做隐式转换 → *json.UnmarshalTypeError;
+#      handler 又用裸断言 err.(validator.ValidationErrors) → panic → gin Recovery → 500。
+# 修复:FlexString 兼容两种写法(B) + 带 ok 的安全断言(A)。
+
+@pytest.mark.write
+def test_09_numeric_ids_must_bind(dm_client, reporter_user_id, ctx_id):
+    """🔴 复现/验收问题 5:ctx_id、ctx_type、user_id 发成 JSON **数字**。
+
+    修复前:500「服务器异常」(与生产一致);修复后:应正常受理。
+    注意 user_id 是 19 位雪花 id,服务端若按 float64 解析会丢精度,
+    举报就会记到别人头上——故本用例同时是精度回归的守卫。
+    """
+    body = {
+        "ctx_id": int(ctx_id) if str(ctx_id).isdigit() else 5921185873199709934,
+        "ctx_type": CTX_TYPE_SINGLE,                      # 数字,不是 "1"
+        "user_id": int(reporter_user_id),                 # 数字,不是 "..."
+        "messages": dm_client.build_report_messages(msg_id=uuid.uuid4().hex),
+        "desc": "selftest numeric ids",
+    }
+    env = dm_client.report_add_raw(body)
+    assert env.code != CODE_SERVER_ERR, (
+        f"【问题 5 复现】id 字段发成 JSON 数字返回 500「服务器异常」——"
+        f"绑定失败(*json.UnmarshalTypeError)后被裸断言 err.(validator.ValidationErrors) "
+        f"panic 掉了。这正是 2026-09-12 生产事故的成因。raw={env.raw!r}")
+    assert env.code == CODE_OK, (
+        f"数字型 id 应能正常受理,实际 code={env.code} raw={env.raw!r}")
+
+
+@pytest.mark.write
+def test_10_string_ids_still_work(dm_client, reporter_user_id, ctx_id):
+    """回归守卫:修复问题 5 后,字符串写法(H5/Web 现状)必须继续可用。"""
+    msgs = dm_client.build_report_messages(msg_id=uuid.uuid4().hex)
+    env = _report(dm_client, reporter_user_id, ctx_id, msgs, desc="selftest string ids")
+    assert env.code == CODE_OK, (
+        f"字符串写法回归失败,code={env.code} raw={env.raw!r}")
