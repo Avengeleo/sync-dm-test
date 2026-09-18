@@ -53,12 +53,25 @@ pytest -m "bi and not write"   # bi 的只读用例(不写库,最安全)
 pytest -m "not s3"          # 跳过依赖 S3 的用例
 ```
 
+**BI 人气热度(v2.27.0)**:打 `admin` 的 `/admin/live/broadcaster/*`。先确认 develop 已部署 **bi-api admin** 且 `app` 库跑过 `20260916_live_display_metrics.sql`。虚拟人数每分钟起伏还要 `live-srv`,只测配置/列表基准时不强制。
+
+```
+python bi_api_test/check_conn.py
+pytest bi_api_test/tests/test_08_heat_global_read.py \
+       bi_api_test/tests/test_09_heat_broadcaster_list.py \
+       bi_api_test/tests/test_10_heat_live_list.py \
+       bi_api_test/tests/test_11_heat_validate.py -v
+pytest bi_api_test/tests/test_12_heat_write.py -v    # 会改全局/主播配置,结束时 restore
+```
+
+未跑 SQL 时热度用例会 **skip**,不把 500 当失败。
+
 先跑连通自检:`python bi_api_test/check_conn.py`(填完 .env 后)。
 
 ## 配置
 
 复制 `.env.example` 为 `.env`,按前缀填对应服务:
-- bi:`BI_BASE_URL`、`BI_USERNAME`(手机号)、`BI_PASSWORD`(MD5,取浏览器 payload 值);
+- bi:`BI_BASE_URL`; develop 开了图形验证时填 `BI_TOKEN`(浏览器登录后请求头 `X-Chat-admin`),不要指望脚本过滑块。本地未开验证码时仍可用 `BI_USERNAME`(手机号)+`BI_PASSWORD`(MD5);
 - dm-api:`DM_API_BASE_URL`、`DM_API_APP_ID`/`DM_API_APP_SECRET`(查库 `sys_apps`)、`DM_API_WIPS`(Encversion 旁路值,跳过 AES)、`DM_API_TOKEN`(live 抓)。
 
 未配置的服务对应套件会整体 **skip**,不报错。

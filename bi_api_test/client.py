@@ -19,12 +19,15 @@ class BiAdminClient(BaseClient):
     def token(self, value):
         self.default_headers[self.AUTH_HEADER] = value
 
-    def login(self, username, password):
-        env = self.post(
-            "/admin/login",
-            json={"username": username, "password": password},
-            auth=False,
-        ).expect_ok()
+    def login(self, username, password, dynamic_verify_token=None):
+        """develop 开了图形验证时必须带 dynamic_verify_token,否则 code=50014。
+
+        自测更稳的做法是浏览器登完后台,把请求头 X-Chat-admin 填进 BI_TOKEN,跳过本接口。
+        """
+        body = {"username": username, "password": password}
+        if dynamic_verify_token:
+            body["dynamic_verify_token"] = dynamic_verify_token
+        env = self.post("/admin/login", json=body, auth=False).expect_ok()
         self.token = env.data["token"]
         return self.token
 
@@ -71,3 +74,23 @@ class BiAdminClient(BaseClient):
             self.sticker_delete(pack_id)
         except Exception:
             pass
+
+    # ── 直播人气热度(v2.27.0,路径 /admin/live/...) ──
+    def heat_global_get(self):
+        return self.post("/admin/live/broadcaster/heat_config/global/get", json={})
+
+    def heat_global_save(self, **payload):
+        return self.post("/admin/live/broadcaster/heat_config/global/save", json=payload)
+
+    def heat_config_update(self, **payload):
+        return self.post("/admin/live/broadcaster/heat_config/update", json=payload)
+
+    def broadcaster_list(self, **payload):
+        body = {"page": 1, "size": 20}
+        body.update(payload)
+        return self.post("/admin/live/broadcaster/list", json=body)
+
+    def live_list(self, **payload):
+        body = {"page": 1, "size": 20}
+        body.update(payload)
+        return self.post("/admin/live/broadcaster/get_live_list", json=body)

@@ -9,11 +9,14 @@ def test_login_success(client):
 
 
 def test_login_wrong_password(anon_client, config):
+    if not config["username"]:
+        pytest.skip("未配置 BI_USERNAME,无法打错误密码登录")
     env = anon_client.post(
         "/admin/login",
-        json={"username": config["username"], "password": config["password"] + "_wrong"},
+        json={"username": config["username"], "password": (config["password"] or "x") + "_wrong"},
         auth=False,
     )
+    # 开了图形验证时先返回 50014,不会走到密码校验;两种都算登录失败
     assert env.code != 200, f"错误密码却登录成功:{env!r}"
 
 
