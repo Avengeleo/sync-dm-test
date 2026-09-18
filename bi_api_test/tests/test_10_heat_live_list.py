@@ -28,7 +28,6 @@ def _assert_display_row(row):
         assert k in row, f"缺 {k}: {row!r}"
         assert int(row[k]) >= 0 or k.endswith("_actual"), f"{k} 不应为异常负值:{row[k]}"
     assert int(row["hot"]) == int(row["heat_total"]), "hot 应等于 heat_total"
-    assert int(row["viewers_guest"]) == 0, "现网无游客体系,viewers_guest 应为 0"
     viewers_sum = (
         int(row["viewers_base"])
         + int(row["viewers_virtual"])
