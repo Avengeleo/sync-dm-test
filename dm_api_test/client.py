@@ -244,6 +244,49 @@ class DmApiClient(BaseClient):
             "desc": desc,
         })
 
+    # ── 直播预告 / 展示指标(v2.27.0)──
+    # 路径在 /live、/voice_room 下,不在 /user。H5 前缀无语聊模块,detail_v2 请 skip。
+    def room_list_v3(self, **payload):
+        body = {"page": 1, "page_size": 20}
+        body.update(payload)
+        if "from_" in body:
+            body["from"] = body.pop("from_")
+        return self.call("/live/room_list_v3", body)
+
+    def live_room_detail(self, room_id, **payload):
+        body = {"room_id": room_id}
+        body.update(payload)
+        return self.call("/live/live_room_detail", body)
+
+    def live_room_detail_v2(self, room_id, **payload):
+        body = {"room_id": room_id}
+        body.update(payload)
+        return self.call("/live/live_room_detail_v2", body)
+
+    def preview_detail(self, preview_id, **payload):
+        body = {"preview_id": preview_id}
+        body.update(payload)
+        return self.call("/live/preview/detail", body)
+
+    def preview_list(self, **payload):
+        return self.call("/live/preview/list", payload or {})
+
+    def preview_reserve(self, preview_id):
+        return self.call("/live/preview/reserve", {"preview_id": preview_id})
+
+    def preview_cancel_reserve(self, preview_id):
+        return self.call("/live/preview/cancel_reserve", {"preview_id": preview_id})
+
+    def voice_room_detail(self, room_id, **payload):
+        body = {"room_id": room_id}
+        body.update(payload)
+        return self.call("/voice_room/detail", body)
+
+    def voice_room_detail_v2(self, room_id, **payload):
+        body = {"room_id": room_id}
+        body.update(payload)
+        return self.call("/voice_room/detail_v2", body)
+
     @staticmethod
     def build_report_messages(msg_id=None, content="[selftest] report", content_type=1,
                               logictype=0, ctx_type=1):

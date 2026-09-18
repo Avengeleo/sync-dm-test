@@ -16,6 +16,7 @@ import os
 import pytest
 
 from dm_api_test.client import DmApiClient
+from dm_api_test.live_display import SKIP_UNDEPLOYED, page_list, split_v3
 
 
 def _clean(key):
@@ -127,6 +128,50 @@ def recent_cleaner(dm_client):
             _cleanup_by_imgurl(dm_client.recent_list, dm_client.recent_del, added)
         except Exception:
             pass
+
+
+@pytest.fixture(scope="session")
+def guest_client(dm_client):
+    """无 token 游客客户端。详情/混排允许游客。"""
+    return dm_client.fork(token="")
+
+
+def _skip_undeployed(env, name):
+    if env.http_status == 404 or env.code in SKIP_UNDEPLOYED or env.code is None:
+        pytest.skip(
+            f"{name} 不可用 http={env.http_status} code={env.code} msg={env.msg!r}。"
+            "确认 develop 已部署 api-gateway/h5-gateway + live-srv,且跑过 20260916 SQL"
+        )
+    if not env.is_ok():
+        pytest.skip(f"{name} 返回异常,跳过展示指标套件:{env!r}")
+
+
+@pytest.fixture(scope="session")
+def live_display_ready(dm_client):
+    """room_list_v3 通了才跑展示指标;未部署则整组 skip。"""
+    probe = dm_client.switch_list()
+    if probe.code in (401, 501) or probe.code != 200:
+        pytest.skip(f"dm-api token 不可用,跳过展示指标:{probe!r}")
+    env = dm_client.room_list_v3(page=1, page_size=20)
+    _skip_undeployed(env, "/live/room_list_v3")
+    rows, total = page_list(env)
+    return {"rows": rows, "total": total}
+
+
+@pytest.fixture(scope="session")
+def sample_live_item(live_display_ready):
+    lives, _ = split_v3(live_display_ready["rows"])
+    if not lives:
+        pytest.skip("develop 当前无直播中房间,跳过依赖直播卡的用例")
+    return lives[0]
+
+
+@pytest.fixture(scope="session")
+def sample_preview_item(live_display_ready):
+    _, previews = split_v3(live_display_ready["rows"])
+    if not previews:
+        pytest.skip("develop 当前无预告,跳过依赖预告卡的用例")
+    return previews[0]
 
 
 def _cleanup_by_imgurl(list_fn, del_fn, added):

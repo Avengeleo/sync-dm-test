@@ -66,6 +66,16 @@ pytest bi_api_test/tests/test_12_heat_write.py -v    # 会改全局/主播配置
 
 未跑 SQL 时热度用例会 **skip**,不把 500 当失败。
 
+**C 端展示指标(v2.27.0)**:打网关 `/live/room_list_v3`、`/live/live_room_detail_v2`、`/live/preview/detail`。先确认 develop 已部署 **api-gateway 或 h5-gateway** + **live-srv**,`app` 库跑过 `20260916_live_display_metrics.sql`。H5 前缀没有语聊,`voice_room/detail_v2` 会 skip。
+
+```
+pytest dm_api_test/tests/test_10_live_display_read.py \
+       dm_api_test/tests/test_11_preview_display.py -v
+pytest dm_api_test/tests/test_12_live_display_write.py -v    # 会预约/取消,结束时 restore
+```
+
+列表为空或未部署时会 **skip**,不把 404/500 当失败。
+
 先跑连通自检:`python bi_api_test/check_conn.py`(填完 .env 后)。
 
 ## 配置
