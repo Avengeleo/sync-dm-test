@@ -277,6 +277,18 @@ class DmApiClient(BaseClient):
     def preview_cancel_reserve(self, preview_id):
         return self.call("/live/preview/cancel_reserve", {"preview_id": preview_id})
 
+    def preview_publish(self, **payload):
+        return self.call("/live/preview/publish", payload)
+
+    def preview_delete(self, preview_id):
+        return self.call("/live/preview/delete", {"preview_id": preview_id})
+
+    def live_category(self, **payload):
+        return self.call("/live/live_category", payload or {})
+
+    def check_user_live_privilege(self, **payload):
+        return self.call("/live/check_user_live_privilege", payload or {})
+
     def voice_room_detail(self, room_id, **payload):
         body = {"room_id": room_id}
         body.update(payload)

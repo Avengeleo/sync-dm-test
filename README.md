@@ -71,7 +71,7 @@ pytest bi_api_test/tests/test_12_heat_write.py -v    # 会改全局/主播配置
 ```
 pytest dm_api_test/tests/test_10_live_display_read.py \
        dm_api_test/tests/test_11_preview_display.py -v
-pytest dm_api_test/tests/test_12_live_display_write.py -v    # 会预约/取消,结束时 restore
+pytest dm_api_test/tests/test_12_live_display_write.py -v    # 用当前 token 造一场预告再预约,结束时删除;必须是主播号
 ```
 
 列表为空或未部署时会 **skip**,不把 404/500 当失败。

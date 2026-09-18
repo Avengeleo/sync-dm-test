@@ -16,7 +16,13 @@ import os
 import pytest
 
 from dm_api_test.client import DmApiClient
-from dm_api_test.live_display import SKIP_UNDEPLOYED, page_list, split_v3
+from dm_api_test.live_display import (
+    SEED_COVER,
+    SKIP_UNDEPLOYED,
+    page_list,
+    publish_seed_preview,
+    split_v3,
+)
 
 
 def _clean(key):
@@ -170,8 +176,38 @@ def sample_live_item(live_display_ready):
 def sample_preview_item(live_display_ready):
     _, previews = split_v3(live_display_ready["rows"])
     if not previews:
-        pytest.skip("develop 当前无预告,跳过依赖预告卡的用例")
+        pytest.skip("develop 当前无预告,跳过依赖预告卡的只读用例(写库用例会自己造一场)")
     return previews[0]
+
+
+@pytest.fixture
+def seeded_preview(dm_client, live_display_ready):
+    """写库用:当前 token 是主播则发一场 pending 预告,结束时删除。"""
+    lives, _ = split_v3(live_display_ready["rows"])
+    cover = ""
+    if lives:
+        cover = lives[0].get("cover") or ""
+    env, priv = publish_seed_preview(dm_client, cover or SEED_COVER)
+    if priv is not None and not priv.is_ok():
+        pytest.skip(f"无法确认是否主播:{priv!r}")
+    if env is None:
+        pytest.skip(
+            "当前 DM_API_TOKEN 不是主播,无法造预告。"
+            "换主播账号 token,或让同事在 develop 发一场 pending 预告后再跑"
+        )
+    if not env.is_ok():
+        pytest.skip(
+            f"发布预告失败 code={env.code} msg={env.msg!r}。"
+            "70136=未实名 70137=非主播 70201=已有5场预告"
+        )
+    data = env.data if isinstance(env.data, dict) else {}
+    pid = data.get("preview_id")
+    if not pid:
+        pytest.skip(f"发布预告未返回 preview_id:{env!r}")
+    try:
+        yield data
+    finally:
+        dm_client.preview_delete(pid)
 
 
 def _cleanup_by_imgurl(list_fn, del_fn, added):

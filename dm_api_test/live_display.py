@@ -5,6 +5,9 @@
 预告预约 = max(0, 基础预约 + 展示增量);开播页抽屉仍是表内真实人数
 """
 
+SEED_COVER = "https://bi-sticker-selftest.invalid/preview_cover.png"
+SEED_TITLE_PREFIX = "[pytest-heat]"
+
 V3_ITEM_KEYS = (
     "item_type",
     "preview_id",
@@ -106,3 +109,44 @@ def assert_old_no_popularity(data, where):
     for k in ("live_room_heat", "likes", "online_count"):
         assert k in data, f"{where} 缺旧字段 {k}"
         assert as_int(data.get(k)) >= 0
+
+
+def _pick_category_id(client):
+    priv = client.check_user_live_privilege()
+    data = priv.data if priv.is_ok() and isinstance(priv.data, dict) else {}
+    cid = as_int(data.get("default_category_id"))
+    if cid:
+        return cid, priv
+    cats = client.live_category()
+    if cats.is_ok() and isinstance(cats.data, list) and cats.data:
+        first = cats.data[0] if isinstance(cats.data[0], dict) else {}
+        return as_int(first.get("id")), priv
+    return 0, priv
+
+
+def publish_seed_preview(client, cover=""):
+    """用当前登录态发一场 pending 预告。不是主播则 (None, privilege_env)。"""
+    import time
+
+    cid, priv = _pick_category_id(client)
+    if not priv.is_ok():
+        return None, priv
+    data = priv.data if isinstance(priv.data, dict) else {}
+    if not data.get("is_broadcaster"):
+        return None, priv
+    if not cid:
+        return None, priv
+    scheduled = int(time.time()) + 20 * 60
+    payload = {
+        "live_title": f"{SEED_TITLE_PREFIX} {scheduled}",
+        "live_cover_img": cover or SEED_COVER,
+        "live_category": cid,
+        "live_type": 1,
+        "scheduled_at": scheduled,
+    }
+    env = client.preview_publish(**payload)
+    if env.code == 70204:
+        payload["scheduled_at"] = scheduled + 2 * 3600
+        payload["live_title"] = f"{SEED_TITLE_PREFIX} {payload['scheduled_at']}"
+        env = client.preview_publish(**payload)
+    return env, priv

@@ -6,8 +6,8 @@ from dm_api_test.live_display import as_int
 
 
 @pytest.mark.write
-def test_reserve_then_restore(dm_client, sample_preview_item):
-    pid = as_int(sample_preview_item["preview_id"])
+def test_reserve_then_restore(dm_client, seeded_preview):
+    pid = as_int(seeded_preview["preview_id"])
     before = dm_client.preview_detail(pid).expect_ok().data
     if before.get("is_fulfilled"):
         pytest.skip("该预告已履约,不能预约")
