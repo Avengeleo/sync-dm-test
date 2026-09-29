@@ -76,6 +76,13 @@ pytest dm_api_test/tests/test_12_live_display_write.py -v    # 用当前 token �
 
 列表为空或未部署时会 **skip**,不把 404/500 当失败。
 
+**直播间分享卡片**:打 `/live/share_cards`。未部署时 skip。写库用例会用当前主播号发一场预告并预约,结束时取消预约并删除预告。
+
+```
+pytest dm_api_test/tests/test_13_live_share_cards.py -v
+pytest dm_api_test/tests/test_13_live_share_cards.py -v -m "not write"
+```
+
 先跑连通自检:`python bi_api_test/check_conn.py`(填完 .env 后)。
 
 ## 配置

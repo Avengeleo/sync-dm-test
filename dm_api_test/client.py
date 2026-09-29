@@ -289,6 +289,11 @@ class DmApiClient(BaseClient):
     def check_user_live_privilege(self, **payload):
         return self.call("/live/check_user_live_privilege", payload or {})
 
+    def share_cards(self, room_ids, **payload):
+        body = {"room_ids": list(room_ids)}
+        body.update(payload)
+        return self.call("/live/share_cards", body)
+
     def voice_room_detail(self, room_id, **payload):
         body = {"room_id": room_id}
         body.update(payload)

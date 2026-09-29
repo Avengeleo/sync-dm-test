@@ -39,12 +39,72 @@ PREVIEW_DETAIL_KEYS = (
 # 网关未部署 / live-srv 未跟上时常见业务码,整组 skip 而不是红
 SKIP_UNDEPLOYED = (404, 500, 501, 502, 503)
 
+SHARE_CARD_KEYS = (
+    "room_id",
+    "status",
+    "live_type",
+    "title",
+    "cover",
+    "broadcaster_user_id",
+    "broadcaster_nickname",
+    "avatar",
+    "live_record_id",
+    "preview_id",
+    "scheduled_at",
+    "is_reserved",
+    "live_room_heat",
+)
+
+SHARE_STATUS_LIVING = 1
+SHARE_STATUS_PREVIEW = 2
+SHARE_STATUS_ENDED = 3
+SHARE_STATUS_INVALID = 4
+
 
 def as_int(v, default=0):
     try:
         return int(v)
     except (TypeError, ValueError):
         return default
+
+
+def share_list(env):
+    env.expect_ok()
+    data = env.data
+    assert isinstance(data, dict), f"分享卡片信封应为对象:{data!r}"
+    assert isinstance(data.get("list"), list), f"缺 list:{data!r}"
+    return data["list"]
+
+
+def assert_share_card(row):
+    for k in SHARE_CARD_KEYS:
+        assert k in row, f"share_cards 缺 {k}: {row!r}"
+    status = as_int(row.get("status"))
+    assert status in (
+        SHARE_STATUS_LIVING,
+        SHARE_STATUS_PREVIEW,
+        SHARE_STATUS_ENDED,
+        SHARE_STATUS_INVALID,
+    ), f"status 非法:{row!r}"
+    assert (row.get("room_id") or "") != "", f"room_id 为空:{row!r}"
+    assert as_int(row.get("live_room_heat")) >= 0, f"live_room_heat 不应为负:{row!r}"
+    reserved = row.get("is_reserved")
+    if status == SHARE_STATUS_LIVING:
+        assert as_int(row.get("preview_id")) == 0
+        assert reserved in (False, 0, None)
+    elif status == SHARE_STATUS_PREVIEW:
+        assert as_int(row.get("preview_id")) > 0
+        assert as_int(row.get("live_record_id")) == 0
+        assert as_int(row.get("scheduled_at")) > 0
+    elif status == SHARE_STATUS_ENDED:
+        assert as_int(row.get("preview_id")) == 0
+        assert reserved in (False, 0, None)
+    else:
+        assert (row.get("title") or "") == ""
+        assert as_int(row.get("preview_id")) == 0
+        assert as_int(row.get("live_record_id")) == 0
+        assert reserved in (False, 0, None)
+    return status
 
 
 def page_list(env):
