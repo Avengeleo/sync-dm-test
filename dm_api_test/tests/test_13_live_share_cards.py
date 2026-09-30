@@ -77,6 +77,7 @@ def test_share_cards_reject_bad_batch(dm_client, share_cards_ready):
     dm_client.call("/live/share_cards", {"preview_ids": ""}).expect(1015)
     dm_client.call("/live/share_cards", {"preview_ids": "[]"}).expect(1015)
     dm_client.call("/live/share_cards", {"preview_ids": "[0]"}).expect(1015)
+    dm_client.call("/live/share_cards", {"preview_ids": '["0"]'}).expect(1015)
     dm_client.share_cards_by_preview(list(range(1, 22))).expect(1015)
 
 
@@ -91,7 +92,7 @@ def test_share_cards_missing_preview(dm_client, share_cards_ready):
 
 
 def test_share_cards_room_ids_ignore_preview_ids(dm_client, share_cards_ready):
-    rows = share_list(dm_client.share_cards([MISSING_ROOM], preview_ids="[9876543210123]"))
+    rows = share_list(dm_client.share_cards([MISSING_ROOM], preview_ids='["9876543210123"]'))
     assert len(rows) == 1
     assert rows[0]["room_id"] == MISSING_ROOM
     assert as_int(rows[0]["preview_id"]) == 0
