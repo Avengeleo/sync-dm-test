@@ -74,6 +74,28 @@ def test_share_cards_reject_bad_batch(dm_client, share_cards_ready):
     dm_client.call("/live/share_cards", {"room_ids": '[""]'}).expect(1015)
     dm_client.call("/live/share_cards", {"room_ids": ["not-a-string"]}).expect(1015)
     dm_client.share_cards([f"room-{i}" for i in range(21)]).expect(1015)
+    dm_client.call("/live/share_cards", {"preview_ids": ""}).expect(1015)
+    dm_client.call("/live/share_cards", {"preview_ids": "[]"}).expect(1015)
+    dm_client.call("/live/share_cards", {"preview_ids": "[0]"}).expect(1015)
+    dm_client.share_cards_by_preview(list(range(1, 22))).expect(1015)
+
+
+def test_share_cards_missing_preview(dm_client, share_cards_ready):
+    missing = 9876543210123
+    rows = share_list(dm_client.share_cards_by_preview([missing]))
+    assert len(rows) == 1
+    card = rows[0]
+    assert as_int(card["preview_id"]) == missing
+    assert card.get("room_id") in ("", None)
+    assert assert_share_card(card) == SHARE_STATUS_INVALID
+
+
+def test_share_cards_room_ids_ignore_preview_ids(dm_client, share_cards_ready):
+    rows = share_list(dm_client.share_cards([MISSING_ROOM], preview_ids="[9876543210123]"))
+    assert len(rows) == 1
+    assert rows[0]["room_id"] == MISSING_ROOM
+    assert as_int(rows[0]["preview_id"]) == 0
+    assert assert_share_card(rows[0]) == SHARE_STATUS_INVALID
 
 
 def test_share_cards_guest_not_reserved(guest_client, sample_live_item, share_cards_ready):

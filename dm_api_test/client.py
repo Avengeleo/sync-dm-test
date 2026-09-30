@@ -295,6 +295,12 @@ class DmApiClient(BaseClient):
         body.update(payload)
         return self.call("/live/share_cards", body)
 
+    def share_cards_by_preview(self, preview_ids, **payload):
+        # 没有房间号时传预告 ID。外层仍是 JSON 数组字符串。
+        body = {"preview_ids": json.dumps(list(preview_ids), separators=(",", ":"))}
+        body.update(payload)
+        return self.call("/live/share_cards", body)
+
     def voice_room_detail(self, room_id, **payload):
         body = {"room_id": room_id}
         body.update(payload)

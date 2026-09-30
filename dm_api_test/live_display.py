@@ -87,7 +87,10 @@ def assert_share_card(row):
         SHARE_STATUS_ENDED,
         SHARE_STATUS_INVALID,
     ), f"status 非法:{row!r}"
-    assert (row.get("room_id") or "") != "", f"room_id 为空:{row!r}"
+    room_id = row.get("room_id") or ""
+    preview_id = as_int(row.get("preview_id"))
+    if status != SHARE_STATUS_INVALID:
+        assert room_id != "", f"room_id 为空:{row!r}"
     assert as_int(row.get("live_room_heat")) >= 0, f"live_room_heat 不应为负:{row!r}"
     assert as_int(row.get("liveRoomLikes")) >= 0, f"liveRoomLikes 不应为负:{row!r}"
     reserved = row.get("is_reserved")
@@ -102,8 +105,10 @@ def assert_share_card(row):
         assert as_int(row.get("preview_id")) == 0
         assert reserved in (False, 0, None)
     else:
+        assert room_id != "" or preview_id > 0, f"无效卡片缺少房间号和预告号:{row!r}"
+        if room_id != "":
+            assert preview_id == 0
         assert (row.get("title") or "") == ""
-        assert as_int(row.get("preview_id")) == 0
         assert as_int(row.get("live_record_id")) == 0
         assert as_int(row.get("liveRoomLikes")) == 0
         assert reserved in (False, 0, None)
