@@ -91,12 +91,16 @@ def test_share_cards_missing_preview(dm_client, share_cards_ready):
     assert assert_share_card(card) == SHARE_STATUS_INVALID
 
 
-def test_share_cards_room_ids_ignore_preview_ids(dm_client, share_cards_ready):
+def test_share_cards_mixed_room_and_preview(dm_client, share_cards_ready):
+    missing_preview = 9876543210123
     rows = share_list(dm_client.share_cards([MISSING_ROOM], preview_ids='["9876543210123"]'))
-    assert len(rows) == 1
+    assert len(rows) == 2
     assert rows[0]["room_id"] == MISSING_ROOM
     assert as_int(rows[0]["preview_id"]) == 0
     assert assert_share_card(rows[0]) == SHARE_STATUS_INVALID
+    assert as_int(rows[1]["preview_id"]) == missing_preview
+    assert rows[1].get("room_id") in ("", None)
+    assert assert_share_card(rows[1]) == SHARE_STATUS_INVALID
 
 
 def test_share_cards_guest_not_reserved(guest_client, sample_live_item, share_cards_ready):
