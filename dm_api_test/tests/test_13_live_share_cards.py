@@ -69,8 +69,10 @@ def test_share_cards_batch_order_and_dedupe(dm_client, sample_live_item, share_c
 
 def test_share_cards_reject_bad_batch(dm_client, share_cards_ready):
     dm_client.call("/live/share_cards", {}).expect(1015)
-    dm_client.call("/live/share_cards", {"room_ids": []}).expect(1015)
-    dm_client.call("/live/share_cards", {"room_ids": [""]}).expect(1015)
+    dm_client.call("/live/share_cards", {"room_ids": ""}).expect(1015)
+    dm_client.call("/live/share_cards", {"room_ids": "[]"}).expect(1015)
+    dm_client.call("/live/share_cards", {"room_ids": '[""]'}).expect(1015)
+    dm_client.call("/live/share_cards", {"room_ids": ["not-a-string"]}).expect(1015)
     dm_client.share_cards([f"room-{i}" for i in range(21)]).expect(1015)
 
 

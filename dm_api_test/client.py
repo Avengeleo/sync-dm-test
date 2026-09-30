@@ -290,7 +290,8 @@ class DmApiClient(BaseClient):
         return self.call("/live/check_user_live_privilege", payload or {})
 
     def share_cards(self, room_ids, **payload):
-        body = {"room_ids": list(room_ids)}
+        # Android 签名把参数当 string，room_ids 传 JSON 数组字符串。
+        body = {"room_ids": json.dumps(list(room_ids), ensure_ascii=False, separators=(",", ":"))}
         body.update(payload)
         return self.call("/live/share_cards", body)
 
