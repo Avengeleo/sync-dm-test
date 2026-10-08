@@ -52,6 +52,7 @@ SHARE_CARD_KEYS = (
     "preview_id",
     "scheduled_at",
     "is_reserved",
+    "is_focus",
     "live_room_heat",
     "liveRoomLikes",
 )
@@ -96,6 +97,7 @@ def assert_share_card(row):
     assert as_int(row.get("live_room_heat")) >= 0, f"live_room_heat 不应为负:{row!r}"
     assert as_int(row.get("liveRoomLikes")) >= 0, f"liveRoomLikes 不应为负:{row!r}"
     reserved = row.get("is_reserved")
+    assert row.get("is_focus") in (True, False, 0, 1), f"is_focus 非法:{row!r}"
     if status == SHARE_STATUS_LIVING:
         assert as_int(row.get("preview_id")) == 0
         assert reserved in (False, 0, None)

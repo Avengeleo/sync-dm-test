@@ -4,11 +4,13 @@
 写库:主播号造一场预告,断言预告卡和 is_reserved,结束时取消预约并删预告。
 """
 
+import json
 import time
 
 import pytest
 
 from dm_api_test.live_display import (
+    SHARE_STATUS_ENDED,
     SHARE_STATUS_INVALID,
     SHARE_STATUS_LIVING,
     SHARE_STATUS_PREVIEW,
@@ -103,6 +105,20 @@ def test_share_cards_mixed_room_and_preview(dm_client, share_cards_ready):
     assert assert_share_card(rows[1]) == SHARE_STATUS_INVALID
 
 
+def test_share_cards_mixed_living_room_stays_live(dm_client, sample_live_item, share_cards_ready):
+    room_id = sample_live_item["room_id"]
+    rows = share_list(dm_client.share_cards([room_id], preview_ids='["9876543210123"]'))
+    assert len(rows) == 2
+    live, missing = rows
+    assert live["room_id"] == room_id
+    assert assert_share_card(live) == SHARE_STATUS_LIVING
+    assert as_int(live["preview_id"]) == 0
+    assert as_int(live["live_record_id"]) == as_int(sample_live_item.get("live_record_id"))
+    assert live.get("title") == sample_live_item.get("title")
+    assert assert_share_card(missing) == SHARE_STATUS_INVALID
+    assert as_int(missing["preview_id"]) == 9876543210123
+
+
 def test_share_cards_guest_not_reserved(guest_client, sample_live_item, share_cards_ready):
     room_id = sample_live_item["room_id"]
     env = guest_client.share_cards([room_id, MISSING_ROOM])
@@ -112,6 +128,7 @@ def test_share_cards_guest_not_reserved(guest_client, sample_live_item, share_ca
     for row in rows:
         assert_share_card(row)
         assert row.get("is_reserved") in (False, 0, None)
+        assert row.get("is_focus") in (False, 0, None)
 
 
 def _card_for(client, room_id):
@@ -146,6 +163,16 @@ def test_share_card_preview_reserve_roundtrip(dm_client, seeded_preview, share_c
 
     assert status == SHARE_STATUS_PREVIEW, f"未开播房间应出预告卡:{card!r}"
     shown = as_int(card["preview_id"])
+    mixed = share_list(dm_client.share_cards(
+        [room_id],
+        preview_ids=json.dumps([str(shown)], separators=(",", ":")),
+    ))
+    assert len(mixed) == 2
+    assert mixed[0]["room_id"] == room_id
+    assert assert_share_card(mixed[0]) == SHARE_STATUS_ENDED, f"混合查询不应把已结束直播盖成预告:{mixed[0]!r}"
+    assert as_int(mixed[0]["preview_id"]) == 0
+    assert assert_share_card(mixed[1]) == SHARE_STATUS_PREVIEW
+    assert as_int(mixed[1]["preview_id"]) == shown
     if shown == pid:
         assert card.get("title") == seeded_preview.get("title")
     assert card.get("is_reserved") in (False, 0, None)
