@@ -152,6 +152,11 @@ def test_share_card_preview_reserve_roundtrip(dm_client, seeded_preview, share_c
     if priv.get("is_living"):
         assert status == SHARE_STATUS_LIVING
         assert as_int(card["preview_id"]) == 0
+        by_preview = share_list(dm_client.share_cards_by_preview([pid]))
+        assert len(by_preview) == 1
+        assert by_preview[0]["room_id"] == room_id
+        assert assert_share_card(by_preview[0]) == SHARE_STATUS_LIVING
+        assert as_int(by_preview[0]["preview_id"]) == pid
         dm_client.preview_reserve(pid).expect_ok()
         try:
             again = _card_for(dm_client, room_id)
