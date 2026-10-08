@@ -81,6 +81,9 @@ def test_share_cards_reject_bad_batch(dm_client, share_cards_ready):
     dm_client.call("/live/share_cards", {"preview_ids": "[0]"}).expect(1015)
     dm_client.call("/live/share_cards", {"preview_ids": '["0"]'}).expect(1015)
     dm_client.share_cards_by_preview(list(range(1, 22))).expect(1015)
+    dm_client.call("/live/share_cards", {"live_record_ids": "[88,89]"}).expect(1015)
+    dm_client.call("/live/share_cards", {"live_record_ids": '["0"]'}).expect(1015)
+    dm_client.share_cards_by_record(list(range(1, 22))).expect(1015)
 
 
 def test_share_cards_missing_preview(dm_client, share_cards_ready):
@@ -91,6 +94,44 @@ def test_share_cards_missing_preview(dm_client, share_cards_ready):
     assert as_int(card["preview_id"]) == missing
     assert card.get("room_id") in ("", None)
     assert assert_share_card(card) == SHARE_STATUS_INVALID
+
+
+def test_share_cards_missing_live_record(dm_client, share_cards_ready):
+    missing = 9876543210124
+    rows = share_list(dm_client.share_cards_by_record([missing]))
+    assert len(rows) == 1
+    card = rows[0]
+    assert as_int(card["live_record_id"]) == missing
+    assert as_int(card["preview_id"]) == 0
+    assert card.get("room_id") in ("", None)
+    assert assert_share_card(card) == SHARE_STATUS_INVALID
+
+
+def test_share_cards_living_by_record(dm_client, sample_live_item, share_cards_ready):
+    record_id = as_int(sample_live_item.get("live_record_id"))
+    if record_id <= 0:
+        pytest.skip("直播样本没有 live_record_id")
+    rows = share_list(dm_client.share_cards_by_record([record_id]))
+    assert len(rows) == 1
+    card = rows[0]
+    assert card["room_id"] == sample_live_item["room_id"]
+    assert assert_share_card(card) == SHARE_STATUS_LIVING
+    assert as_int(card["live_record_id"]) == record_id
+    assert as_int(card["preview_id"]) == 0
+    assert card.get("title") == sample_live_item.get("title")
+
+
+def test_share_cards_three_targets_keep_order(dm_client, share_cards_ready):
+    rows = share_list(dm_client.share_cards(
+        [MISSING_ROOM],
+        preview_ids='["9876543210123"]',
+        live_record_ids='["9876543210124"]',
+    ))
+    assert len(rows) == 3
+    assert rows[0]["room_id"] == MISSING_ROOM
+    assert as_int(rows[1]["preview_id"]) == 9876543210123
+    assert as_int(rows[2]["live_record_id"]) == 9876543210124
+    assert assert_share_card(rows[2]) == SHARE_STATUS_INVALID
 
 
 def test_share_cards_mixed_room_and_preview(dm_client, share_cards_ready):

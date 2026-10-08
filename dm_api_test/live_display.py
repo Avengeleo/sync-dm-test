@@ -114,9 +114,9 @@ def assert_share_card(row):
         assert as_int(row.get("liveRoomLikes")) == 0
         assert reserved in (False, 0, None)
     else:
-        assert room_id != "" or preview_id > 0, f"无效卡片缺少房间号和预告号:{row!r}"
+        record_id = as_int(row.get("live_record_id"))
+        assert room_id != "" or preview_id > 0 or record_id > 0, f"无效卡片缺少房间号、预告号和场次号:{row!r}"
         assert (row.get("title") or "") == ""
-        assert as_int(row.get("live_record_id")) == 0
         assert as_int(row.get("liveRoomLikes")) == 0
         assert reserved in (False, 0, None)
     return status

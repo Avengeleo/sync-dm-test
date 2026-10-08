@@ -301,6 +301,12 @@ class DmApiClient(BaseClient):
         body.update(payload)
         return self.call("/live/share_cards", body)
 
+    def share_cards_by_record(self, live_record_ids, **payload):
+        # 钉住某一场。外层仍是 JSON 数组字符串。
+        body = {"live_record_ids": json.dumps([str(item) for item in live_record_ids], separators=(",", ":"))}
+        body.update(payload)
+        return self.call("/live/share_cards", body)
+
     def voice_room_detail(self, room_id, **payload):
         body = {"room_id": room_id}
         body.update(payload)
