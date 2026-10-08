@@ -60,6 +60,7 @@ SHARE_STATUS_LIVING = 1
 SHARE_STATUS_PREVIEW = 2
 SHARE_STATUS_ENDED = 3
 SHARE_STATUS_INVALID = 4
+SHARE_STATUS_PREVIEW_CANCELLED = 5
 
 
 def as_int(v, default=0):
@@ -86,6 +87,7 @@ def assert_share_card(row):
         SHARE_STATUS_PREVIEW,
         SHARE_STATUS_ENDED,
         SHARE_STATUS_INVALID,
+        SHARE_STATUS_PREVIEW_CANCELLED,
     ), f"status 非法:{row!r}"
     room_id = row.get("room_id") or ""
     preview_id = as_int(row.get("preview_id"))
@@ -103,6 +105,11 @@ def assert_share_card(row):
         assert as_int(row.get("scheduled_at")) > 0
     elif status == SHARE_STATUS_ENDED:
         assert as_int(row.get("preview_id")) == 0
+        assert reserved in (False, 0, None)
+    elif status == SHARE_STATUS_PREVIEW_CANCELLED:
+        assert preview_id > 0
+        assert as_int(row.get("live_record_id")) == 0
+        assert as_int(row.get("liveRoomLikes")) == 0
         assert reserved in (False, 0, None)
     else:
         assert room_id != "" or preview_id > 0, f"无效卡片缺少房间号和预告号:{row!r}"
