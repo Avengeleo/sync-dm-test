@@ -196,13 +196,19 @@ def test_share_card_preview_reserve_roundtrip(dm_client, seeded_preview, share_c
         by_preview = share_list(dm_client.share_cards_by_preview([pid]))
         assert len(by_preview) == 1
         assert by_preview[0]["room_id"] == room_id
-        assert assert_share_card(by_preview[0]) == SHARE_STATUS_LIVING
+        assert assert_share_card(by_preview[0]) == SHARE_STATUS_PREVIEW, (
+            f"房间在播别的场次时,按预告 ID 仍应返回这条预告:{by_preview[0]!r}"
+        )
         assert as_int(by_preview[0]["preview_id"]) == pid
+        assert by_preview[0].get("title") == seeded_preview.get("title")
         dm_client.preview_reserve(pid).expect_ok()
         try:
             again = _card_for(dm_client, room_id)
             assert assert_share_card(again) == SHARE_STATUS_LIVING
             assert again.get("is_reserved") in (False, 0, None)
+            pinned = share_list(dm_client.share_cards_by_preview([pid]))[0]
+            assert assert_share_card(pinned) == SHARE_STATUS_PREVIEW
+            assert pinned.get("is_reserved") in (True, 1)
         finally:
             dm_client.preview_cancel_reserve(pid)
         return
