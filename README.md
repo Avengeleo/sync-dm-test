@@ -122,7 +122,7 @@ pytest dm_api_test/tests/test_09_pc_scan_login_write.py -v -s
 | marker | 含义 |
 |---|---|
 | `bi` / `dm_api` / `dm_im` | 服务套件(按目录**自动**打,不用手写装饰器) |
-| `write` | 会写库/改状态(有副作用,用例自带清理) |
+| `write` | 会写库/改状态；具体清理与会话影响见各用例说明 |
 | `s3` | 依赖测试环境 S3 |
 | `tray_icon` | 需配 `BI_TRAY_ICON_*` 才跑 |
 
@@ -132,3 +132,19 @@ pytest dm_api_test/tests/test_09_pc_scan_login_write.py -v -s
 1. 装 Python 3.9~3.12(`python-3.12.8-amd64.exe`,勾 Add to PATH);
 2. PyCharm 建 venv 解释器;
 3. 离线装依赖:`pip install --no-index --find-links=<离线包目录> -r requirements.txt`。
+
+## Vuln20 / Vuln22 的 dev 安全回归
+
+配置、运行命令、测试数据要求和退群/重入步骤见 [IM 安全回归指南](docs/IM安全回归.md)。
+新套件位于 `im_test/tests/security/`，标记为 `im_security`。Vuln21 本版本已回退，不在本次验收范围。
+
+先在 `.env` 填写 `IM_SECURITY_ENV=dev`、实际部署版本、两个专用账号和私密频道。
+频道用例只读；登录用例会修改会话、可能踢线，须另设 `IM_SECURITY_ALLOW_LOGIN=1`。
+未配置或数据不足会明确 **skip**，401、5xx、网络异常、非法 protobuf 会失败，不能算修复通过。
+
+```bash
+# 仅 Vuln22 三个频道入口，覆盖 v1/v2；不登录、不发消息、不回 ACK
+python -m pytest im_test/tests/security/test_channel_access.py -v
+# Vuln20：分别探测已配置的 WS、TCP 入口
+python -m pytest im_test/tests/security/test_login_uid.py -v
+```
