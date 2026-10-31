@@ -148,3 +148,11 @@ python -m pytest im_test/tests/security/test_channel_access.py -v
 # Vuln20：分别探测已配置的 WS、TCP 入口
 python -m pytest im_test/tests/security/test_login_uid.py -v
 ```
+
+## Vuln42 / Vuln43 / Vuln47 自测
+
+新增套件复用安全回归的 dev 地址和 A/B 账号，配置与执行顺序见
+[42、43、47 自测指南](docs/IM安全回归42-43-47.md)。
+42 使用 A/B 都在的独立频道；43 的设备列表只读，踢设备须单独确认；
+47 检查手工导出的运行日志，不能用接口成功替代日志验收。
+默认不推进频道状态、不踢设备、不同步推送 token；缺配置明确跳过。
