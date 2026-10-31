@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "environment": "dev",
+  "deployment": "REPLACE_WITH_DEPLOYED_COMMIT_OR_ARTIFACT_VERSION",
+  "window": {
+    "start": "2026-10-31T02:00:00Z",
+    "end": "2026-10-31T02:10:00Z"
+  },
+  "test_accounts_only": false,
+  "export_complete": false,
+  "sentinels": {
+    "login_token": "",
+    "push_token": "",
+    "voip_token": "",
+    "private_key": "",
+    "tea_key": "",
+    "plaintext": ""
+  },
+  "services": {
+    "http-gateway": {"status": "running", "file": "logs/http-gateway.ndjson"},
+    "im-gateway-tcp": {"status": "running", "file": "logs/im-gateway-tcp.ndjson"},
+    "im-gateway-ws": {"status": "running", "file": "logs/im-gateway-ws.ndjson"},
+    "login-srv": {"status": "running", "file": "logs/login-srv.ndjson"},
+    "crypto-srv": {"status": "running", "file": "logs/crypto-srv.ndjson"},
+    "msg-srv": {"status": "running", "file": "logs/msg-srv.ndjson"},
+    "msg-job": {"status": "running", "file": "logs/msg-job.ndjson"},
+    "notification-srv": {"status": "running", "file": "logs/notification-srv.ndjson"},
+    "group-job": {"status": "running", "file": "logs/group-job.ndjson"},
+    "channel-job": {"status": "running", "file": "logs/channel-job.ndjson"},
+    "signal-srv": {"status": "running", "file": "logs/signal-srv.ndjson"},
+    "signal-job": {"status": "running", "file": "logs/signal-job.ndjson"},
+    "call-record-job": {"status": "running", "file": "logs/call-record-job.ndjson"}
+  },
+  "cases": [
+    {
+      "scenario": "login_and_push_sync",
+      "outcome": "success",
+      "positive_control_succeeded": false,
+      "observed_at": "2026-10-31T02:01:00Z",
+      "injected_sentinels": ["login_token", "push_token", "voip_token"],
+      "evidence_ref": "REPLACE_WITH_MANUAL_RESULT_REFERENCE_WITHOUT_SECRETS",
+      "diagnostics": {
+        "im-gateway-tcp": "REPLACE_WITH_ACTUAL_SAFE_DIAGNOSTIC",
+        "im-gateway-ws": "REPLACE_WITH_ACTUAL_SAFE_DIAGNOSTIC",
+        "login-srv": "REPLACE_WITH_ACTUAL_SAFE_DIAGNOSTIC",
+        "signal-job": "REPLACE_WITH_ACTUAL_SAFE_PUSH_INFO_EVENT_DIAGNOSTIC",
+        "call-record-job": "REPLACE_WITH_ACTUAL_SAFE_PUSH_INFO_EVENT_DIAGNOSTIC"
+      }
+    },
+    {
+      "scenario": "message_delivery_and_history_read",
+      "outcome": "success",
+      "positive_control_succeeded": false,
+      "observed_at": "2026-10-31T02:03:00Z",
+      "injected_sentinels": ["plaintext"],
+      "evidence_ref": "REPLACE_WITH_MANUAL_RESULT_REFERENCE_WITHOUT_SECRETS",
+      "diagnostics": {
+        "http-gateway": "REPLACE_WITH_ACTUAL_SAFE_DIAGNOSTIC",
+        "msg-srv": "REPLACE_WITH_ACTUAL_SAFE_DIAGNOSTIC",
+        "msg-job": "REPLACE_WITH_ACTUAL_SAFE_DIAGNOSTIC",
+        "notification-srv": "REPLACE_WITH_ACTUAL_SAFE_DIAGNOSTIC",
+        "group-job": "REPLACE_WITH_ACTUAL_SAFE_DIAGNOSTIC",
+        "channel-job": "REPLACE_WITH_ACTUAL_SAFE_DIAGNOSTIC"
+      }
+    },
+    {
+      "scenario": "reencrypt_success",
+      "outcome": "success",
+      "positive_control_succeeded": false,
+      "observed_at": "2026-10-31T02:04:00Z",
+      "injected_sentinels": ["private_key", "tea_key", "plaintext"],
+      "evidence_ref": "REPLACE_WITH_MANUAL_ROUNDTRIP_RESULT_REFERENCE",
+      "diagnostics": {"crypto-srv": "REPLACE_WITH_ACTUAL_SAFE_DIAGNOSTIC"}
+    },
+    {
+      "scenario": "reencrypt_expected_error",
+      "outcome": "expected_error",
+      "positive_control_succeeded": false,
+      "observed_at": "2026-10-31T02:05:00Z",
+      "injected_sentinels": ["private_key", "tea_key", "plaintext"],
+      "evidence_ref": "REPLACE_WITH_EXPECTED_ERROR_AND_SUCCESSFUL_PREREQUISITE_REFERENCE",
+      "diagnostics": {"crypto-srv": "REPLACE_WITH_ACTUAL_SAFE_ERROR_DIAGNOSTIC"}
+    },
+    {
+      "scenario": "call_signaling_and_offline_push",
+      "outcome": "success",
+      "positive_control_succeeded": false,
+      "observed_at": "2026-10-31T02:07:00Z",
+      "injected_sentinels": ["push_token", "voip_token"],
+      "evidence_ref": "REPLACE_WITH_MANUAL_CALL_RESULT_REFERENCE_WITHOUT_SECRETS",
+      "diagnostics": {
+        "signal-srv": "REPLACE_WITH_ACTUAL_SAFE_DIAGNOSTIC"
+      }
+    }
+  ]
+}
