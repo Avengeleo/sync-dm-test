@@ -1,5 +1,7 @@
 # 密钥/本地配置
 .env
+.env.*
+!.env.example
 
 # Python 运行产物
 __pycache__/
