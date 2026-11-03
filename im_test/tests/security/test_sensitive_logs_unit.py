@@ -7,7 +7,7 @@ import traceback
 import pytest
 
 from im_test.security_logs import (
-    DEFAULT_SERVICES, REQUIRED_SECRET_TYPES, SecurityLogAuditError, audit_export,
+    DEFAULT_SERVICES, REQUIRED_SECRET_TYPES, SecurityLogAuditError, audit_export, prescan_export,
 )
 
 
@@ -297,3 +297,63 @@ def test_log_export_traceback_does_not_echo_invalid_timestamp(tmp_path):
     rendered = "".join(traceback.format_exception(type(caught.value), caught.value, caught.value.__traceback__))
     assert secret not in rendered
     assert caught.value.__suppress_context__
+
+
+PRESCAN_TOKEN = "V47_PRESCAN_LOGIN_TOKEN_PRIVATE"
+PRESCAN_WINDOW = ("2026-10-31T02:00:00Z", "2026-10-31T02:10:00Z")
+
+
+def _prescan_files(tmp_path, rows):
+    files = {}
+    for service, messages in rows.items():
+        files[service] = tmp_path / (service + ".ndjson")
+        _write_rows(files[service], service, messages)
+    return files
+
+
+def test_prescan_records_every_leak_without_version_or_echo(tmp_path):
+    encoded = base64.b64encode(PRESCAN_TOKEN.encode()).decode()
+    files = _prescan_files(tmp_path, {
+        "login-srv": ["safe uid=41", "check token=" + PRESCAN_TOKEN, "payload " + encoded],
+        "msg-srv": ["safe result=ok"],
+    })
+    report = prescan_export(files, {"login_token": [PRESCAN_TOKEN]}, *PRESCAN_WINDOW)
+    assert report.findings == (("login-srv", 2, "login_token"), ("login-srv", 3, "login_token"))
+    assert report.service_counts == {"login-srv": 3, "msg-srv": 1}
+    assert report.covered_secret_types == ("login_token",)
+    assert report.formal_acceptance is False and report.version_verified is False
+    assert PRESCAN_TOKEN not in repr(report)
+
+
+def test_prescan_accepts_mixed_deployment_labels_but_keeps_formal_audit_strict(tmp_path):
+    files = _prescan_files(tmp_path, {"login-srv": ["safe uid=41"]})
+    rows = [json.loads(line) for line in files["login-srv"].read_text(encoding="utf-8").splitlines()]
+    rows[0]["deployment"] = "version-unverified"
+    files["login-srv"].write_text(json.dumps(rows[0]) + "\n", encoding="utf-8")
+    assert prescan_export(files, {"login_token": PRESCAN_TOKEN}, *PRESCAN_WINDOW).findings == ()
+    path, _ = _export(tmp_path)
+    _write_rows(tmp_path / "login-srv.ndjson", "login-srv", ["safe result=ok"])
+    with pytest.raises(SecurityLogAuditError, match="部署版本"):
+        audit_export(path, "version-unverified")
+
+
+@pytest.mark.parametrize("sentinels,fragment", [
+    ({}, "至少需要一类"),
+    ({"unknown": PRESCAN_TOKEN}, "未知类别"),
+    ({"login_token": "short"}, "长度无效"),
+    ({"login_token": []}, "为空"),
+])
+def test_prescan_rejects_invalid_sentinels(tmp_path, sentinels, fragment):
+    files = _prescan_files(tmp_path, {"login-srv": ["safe"]})
+    with pytest.raises(SecurityLogAuditError, match=fragment):
+        prescan_export(files, sentinels, *PRESCAN_WINDOW)
+
+
+def test_prescan_rejects_empty_or_out_of_window_logs(tmp_path):
+    empty = tmp_path / "login-srv.ndjson"
+    empty.write_text("", encoding="utf-8")
+    with pytest.raises(SecurityLogAuditError, match="日志为空"):
+        prescan_export({"login-srv": empty}, {"login_token": PRESCAN_TOKEN}, *PRESCAN_WINDOW)
+    files = _prescan_files(tmp_path, {"msg-srv": ["safe"]})
+    with pytest.raises(SecurityLogAuditError, match="超出预扫描窗口"):
+        prescan_export(files, {"login_token": PRESCAN_TOKEN}, "2026-10-31T03:00:00Z", "2026-10-31T04:00:00Z")

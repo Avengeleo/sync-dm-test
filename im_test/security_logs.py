@@ -49,6 +49,17 @@ class LogAuditReport:
         return not self.excluded_services
 
 
+@dataclass(frozen=True)
+class LogPrescanReport:
+    """版本未核实时的敏感值预扫描结果；永远不代表 V47 正式验收。"""
+    line_count: int
+    service_counts: Dict[str, int]
+    findings: Tuple[Tuple[str, int, str], ...]
+    covered_secret_types: Tuple[str, ...]
+    formal_acceptance: bool = False
+    version_verified: bool = False
+
+
 def _fail(message):
     raise SecurityLogAuditError(message) from None
 
@@ -215,6 +226,70 @@ def _secrets(data):
             _fail("敏感输入长度无效；每类需 12 到 32768 字节，类别=" + kind)
         result[kind] = _representations(value)
     return result
+
+
+def _prescan_secrets(values):
+    allowed = REQUIRED_SECRET_TYPES + OPTIONAL_SECRET_TYPES
+    if not isinstance(values, dict) or not values:
+        _fail("预扫描至少需要一类实际使用过的敏感输入")
+    result = {}
+    for kind, items in values.items():
+        if kind not in allowed:
+            _fail("sentinels 包含未知类别")
+        items = items if isinstance(items, (list, tuple)) else [items]
+        if not items:
+            _fail("敏感输入为空；类别=" + kind)
+        variants = set()
+        for value in items:
+            if not isinstance(value, str) or not 12 <= len(value.encode("utf-8")) <= 32768:
+                _fail("敏感输入长度无效；每类需 12 到 32768 字节，类别=" + kind)
+            variants.update(_representations(value))
+        result[kind] = tuple(variants)
+    return result
+
+
+def prescan_export(files, sentinels, window_start, window_end):
+    """扫描本地导出中的已知敏感值，记录全部命中位置，不校验部署版本。
+
+    files 为 {服务: JSONL 路径}；sentinels 为 {类别: 值或值列表}。结果只含服务、
+    行号和类别，不含匹配值或原始日志；formal_acceptance 恒为 False。
+    """
+    start, end = _timestamp(window_start), _timestamp(window_end)
+    if start >= end:
+        _fail("日志窗口开始时间必须早于结束时间")
+    if not isinstance(files, dict) or not files:
+        _fail("预扫描至少需要一个服务导出")
+    secrets = _prescan_secrets(sentinels)
+    findings, counts = [], {}
+    for service, filename in sorted(files.items()):
+        count = 0
+        try:
+            with Path(filename).open("r", encoding="utf-8") as source:
+                for line_number, raw in enumerate(source, 1):
+                    if not raw.strip():
+                        continue
+                    if len(raw) > 1024 * 1024:
+                        _fail("日志行超过 1 MiB；服务=%s 行=%d" % (service, line_number))
+                    try:
+                        row = json.loads(raw)
+                    except ValueError:
+                        _fail("JSONL 日志畸形；服务=%s 行=%d" % (service, line_number))
+                    if not isinstance(row, dict) or row.get("service") != service or row.get("environment") != "dev":
+                        _fail("日志环境/服务元数据不一致；服务=%s 行=%d" % (service, line_number))
+                    if not start <= _timestamp(row.get("timestamp")) <= end:
+                        _fail("日志超出预扫描窗口；服务=%s 行=%d" % (service, line_number))
+                    if not isinstance(row.get("message"), (str, dict, list)) or not row["message"]:
+                        _fail("日志未保留原始 message；服务=%s 行=%d" % (service, line_number))
+                    kind = _leaked_kind((raw,) + tuple(_text_parts(row)), secrets)
+                    if kind:
+                        findings.append((service, line_number, kind))
+                    count += 1
+        except (OSError, UnicodeError):
+            _fail("无法读取完整本地日志；服务=" + service)
+        if not count:
+            _fail("日志为空；服务=" + service)
+        counts[service] = count
+    return LogPrescanReport(sum(counts.values()), counts, tuple(findings), tuple(sorted(secrets)))
 
 
 def _cases(data, active, secret_types, start, end):
