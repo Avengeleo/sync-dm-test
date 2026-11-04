@@ -9,7 +9,9 @@ import os
 try:
     from dotenv import load_dotenv
 
-    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+    # 44/45专用入口已经从显式文件构造子进程环境；禁止再从根.env补入其他账号。
+    if os.environ.get("IM_SECURITY_ISOLATED_CONFIG") != "1":
+        load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 except Exception:
     pass
 

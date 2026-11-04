@@ -99,6 +99,45 @@ def security_device_enabled(security_identity_http_enabled):
     return security_identity_http_enabled
 
 
+def _security_44_45_write_enabled(config, request, kind):
+    """两项共用前置；不复用42频道或43踢设备的写许可。"""
+    from im_test.security_write_preflight import require_idle_web_accounts, WritePreflightError
+
+    _require_dev(config, request)
+    _require_accounts(config)
+    _require_deployment(config)
+    if not config["http_base"] or not config["ws_url"]:
+        pytest.skip("44/45 缺少 dev HTTP / WebSocket 地址；真实环境未验证")
+    if config["client_type"] != 2:
+        pytest.fail("44/45 本轮只使用 Web 槽位，请配置 IM_SECURITY_CLIENT_TYPE=2", pytrace=False)
+    prefix = "mutation" if kind == "44" else "key_identity"
+    if not config[prefix + "_allow_write"] or not config[prefix + "_fixture_confirmed"]:
+        pytest.skip("Vuln" + kind + " 专用写操作及夹具未确认；不会登录或发送测试包")
+    if kind == "45":
+        if not config["key_group_id"]:
+            pytest.skip("缺少 IM_SECURITY_KEY_GROUP_ID 专用普通群；不能复用42超级群频道R")
+        if config["key_group_id"] in (config["channel_id"], config["identity_channel_id"]):
+            pytest.fail("45普通群夹具不能复用22/42的频道配置", pytrace=False)
+        if config["key_nonmember_uid"] in (config["user_id"], config["user_id2"]):
+            pytest.fail("45非成员目标必须独立于群内A/B账号", pytrace=False)
+    try:
+        require_idle_web_accounts(config, all_slots=kind == "45")
+    except WritePreflightError as exc:
+        pytest.fail(str(exc), pytrace=False)
+    request.node.user_properties.append(("security_scope", "Vuln" + kind + "_isolated_web_fixture"))
+    return config
+
+
+@pytest.fixture
+def security_mutation_enabled(security_config, request):
+    return _security_44_45_write_enabled(security_config, request, "44")
+
+
+@pytest.fixture
+def security_key_identity_enabled(security_config, request):
+    return _security_44_45_write_enabled(security_config, request, "45")
+
+
 @pytest.fixture
 def security_device_kick_enabled(security_device_enabled, request):
     config = security_device_enabled

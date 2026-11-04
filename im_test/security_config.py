@@ -78,6 +78,12 @@ def load_security_config(environ=None):
         timeout=timeout,
         app_version=value("IM_SECURITY_APP_VERSION", "IM_NEW_APP_VERSION", default="9.9.9"),
         allow_login=value("IM_SECURITY_ALLOW_LOGIN") == "1",
+        mutation_allow_write=value("IM_SECURITY_MUTATION_ALLOW_WRITE") == "1",
+        mutation_fixture_confirmed=value("IM_SECURITY_MUTATION_FIXTURE_CONFIRMED") == "1",
+        key_identity_allow_write=value("IM_SECURITY_KEY_IDENTITY_ALLOW_WRITE") == "1",
+        key_identity_fixture_confirmed=value("IM_SECURITY_KEY_IDENTITY_FIXTURE_CONFIRMED") == "1",
+        key_group_id=integer("IM_SECURITY_KEY_GROUP_ID"),
+        key_nonmember_uid=integer("IM_SECURITY_KEY_NONMEMBER_UID"),
     )
     for key, schemes in (
         ("ws_url", {"ws", "wss"}),
