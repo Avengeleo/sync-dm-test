@@ -1,0 +1,22 @@
+{
+  "environment": "dev",
+  "service": "robot-srv",
+  "deployment": "",
+  "version_source": "operator_release_confirmation",
+  "version_evidence": "",
+  "export_complete": false,
+  "export_file": "robot-original.jsonl",
+  "expected_line_count": 0,
+  "window_start": "",
+  "window_end": "",
+  "parameters": {
+    "normal_parameter": "",
+    "error_parameter": "",
+    "slow_parameter": ""
+  },
+  "cases": [
+    {"kind": "normal", "timestamp": "", "completed": false, "parameter_ids": ["normal_parameter"], "evidence_ref": ""},
+    {"kind": "error", "timestamp": "", "completed": false, "parameter_ids": ["error_parameter"], "evidence_ref": "", "diagnostic_line": 0},
+    {"kind": "slow", "timestamp": "", "completed": false, "parameter_ids": ["slow_parameter"], "evidence_ref": "", "diagnostic_line": 0}
+  ]
+}

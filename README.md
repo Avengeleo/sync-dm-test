@@ -163,3 +163,10 @@ python -m pytest im_test/tests/security/test_login_uid.py -v
 `python -m im_test.run_security_44_45` 只调度这两项，默认没有写许可。
 它用新消息验证编辑/撤回归属，用测试 marker 验证密钥同步身份；失败不重发，
 跳过和证据不足不算通过。不会补测42/43/47，也不会启用46整改。
+
+### IM P2 安全自测（85 / 86 / 92）
+
+入口：`python -m im_test.run_security_p2 --help`。每次只选一项，默认不登录、不写状态；
+仅dev专用账号与显式许可允许执行85/86，92仅扫描本地robot-srv日志导出。
+配置、阶段命令及云主机执行范围见 [IM安全回归85-86-92](docs/IM安全回归85-86-92.md)。
+禁言继续待核实，不纳入通过数；不运行其他漏洞的测试，不向main提交或推送。
