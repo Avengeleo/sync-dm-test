@@ -264,3 +264,33 @@ class ImWsClient:
             return False
         except (TimeoutError, websocket.WebSocketTimeoutException):
             return True
+
+    # ── 消息漫游(feature/msg-roaming):社群 ACK 带 seq ──
+    def _recv_ack_for(self, ack_cmd, msg_id, timeout=None):
+        """等指定 msgId 的 ACK。新架构 ACK 由服务端落库后推送,帧头 MsgSeq=0,只能按 RadioChatAck.sMsgId(3) 匹配。"""
+        deadline = time.time() + (timeout or self.timeout)
+        while True:
+            remain = deadline - time.time()
+            if remain <= 0:
+                raise TimeoutError(f"未在 {timeout or self.timeout}s 内收到 msgId={msg_id} 的 cmd=0x{ack_cmd:04x}")
+            ack = proto_min.decode(self._recv_until(ack_cmd, remain))
+            mid = ack.get(3, b"")
+            if (mid.decode() if isinstance(mid, bytes) else mid) == msg_id:
+                return ack
+
+    def send_channel_chat_seq(self, radio_id, content="[selftest] roaming", msg_id=None):
+        """发超级群普通消息并等本条 ACK。返回 {errcode, sent_msg_id, seq}。
+        seq = RadioChatAck.seq(8):新架构客户端落库后才有,老架构 ACK 为 0。
+        msg_id 传已发过的 id = 模拟客户端超时用同一 msgId 重发。"""
+        msg_id = msg_id or uuid.uuid4().hex
+        self._send(RADIO_CHAT, proto_min.radio_chat(radio_id, msg_id, content))
+        ack = self._recv_ack_for(RADIO_CHAT_ACK, msg_id)
+        return {"errcode": ack.get(5, 0), "sent_msg_id": msg_id, "seq": ack.get(8, 0)}
+
+    def send_channel_reaction_seq(self, radio_id, parent_msg_id, emoji="👍", action=0):
+        """发超级群心情回应并等本条 ACK。返回 {errcode, sent_msg_id, seq}。"""
+        msg_id = uuid.uuid4().hex
+        content = proto_min.mes_reaction_content(emoji, action)
+        self._send(RADIO_REACTION_UPLINK, proto_min.radio_chat_reaction(radio_id, msg_id, parent_msg_id, content))
+        ack = self._recv_ack_for(RADIO_REACTION_ACK, msg_id)
+        return {"errcode": ack.get(5, 0), "sent_msg_id": msg_id, "seq": ack.get(8, 0)}
