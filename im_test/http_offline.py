@@ -120,3 +120,13 @@ class OfflineHttpClient:
         if r.status_code != 200:
             return r.status_code, []
         return 200, proto_min.parse_offline_signal_resp(r.content)
+
+    # ── 消息漫游(feature/msg-roaming)──
+    def channel_msg_by_seq(self, chnn_id, direction, base_seq=0, count=20, client_type=0):
+        """按 seq 拉取社群消息。direction=1 往更早(base_seq=0 取最新)、2 往更新(补缺号)。
+        HTTP 状态码即业务码(400/401/403/500)。成功返回 (200, parse_chnn_msg_by_seq_resp 的结果)。"""
+        body = proto_min.chnn_msg_by_seq_req(chnn_id, direction, base_seq, count, client_type)
+        r = self._post("/channel/v1/msg/by_seq", body)
+        if r.status_code != 200:
+            return r.status_code, None
+        return 200, proto_min.parse_chnn_msg_by_seq_resp(r.content)

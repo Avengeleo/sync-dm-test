@@ -496,3 +496,28 @@ def parse_chnn_msg_by_id_resp(body):
         })
     return {"code": _first_varint(top, 1), "msgs": msgs,
             "missing": [_s(x) for x in top.get(3, [])]}
+
+
+# ── 消息漫游(feature/msg-roaming):按 seq 拉取社群消息 /channel/v1/msg/by_seq ──
+# 字段号读 im-common/proto/channelpull/pull_arg.proto 核实。
+def chnn_msg_by_seq_req(chnn_id, direction, base_seq=0, count=20, client_type=0):
+    """PullChnnMsgBySeqReq: sUserId=1(网关覆盖,不发) sChnnId=2 direction=3(1更早/2更新)
+    baseSeq=4(不含;更早时 0=从最新开始) count=5 clientType=6。"""
+    return (_fv(2, int(chnn_id)) + _fv(3, int(direction)) + _fv(4, int(base_seq))
+            + _fv(5, int(count)) + _fv(6, int(client_type)))
+
+
+def parse_chnn_msg_by_seq_resp(body):
+    """PullChnnMsgBySeqRsp: errcode=1 lsMessage=2(repeated ChnnChat,按 seq 升序) maxSeq=3 minSeq=4
+    nextSeq=5 hasMore=6。ChnnChat.seq=18。"""
+    top = decode_all(body)
+    msgs = []
+    for raw in top.get(2, []):
+        f = decode(raw)
+        msgs.append({
+            "from_id": f.get(1, 0), "msg_id": _s(f.get(3, b"")), "content": f.get(6, b""),
+            "event_type": f.get(17, 0), "old_msg_id": _s(f.get(16, b"")), "seq": f.get(18, 0),
+        })
+    return {"code": _first_varint(top, 1), "msgs": msgs, "max_seq": _first_varint(top, 3),
+            "min_seq": _first_varint(top, 4), "next_seq": _first_varint(top, 5),
+            "has_more": bool(_first_varint(top, 6))}
