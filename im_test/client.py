@@ -294,3 +294,12 @@ class ImWsClient:
         self._send(RADIO_REACTION_UPLINK, proto_min.radio_chat_reaction(radio_id, msg_id, parent_msg_id, content))
         ack = self._recv_ack_for(RADIO_REACTION_ACK, msg_id)
         return {"errcode": ack.get(5, 0), "sent_msg_id": msg_id, "seq": ack.get(8, 0)}
+
+    def send_channel_edit(self, radio_id, msg_id, new_content):
+        """超级群编辑(0x3208):MESRadioEditMsgC2C{radioId=2, msgId=3(原消息), content=4(RadioChat 字节,sContent=新内容)}。
+        编辑 ACK(0x3209)仍由 srv 立即返回,不带 seq。返回 {errcode}。"""
+        inner = proto_min.radio_chat(radio_id, msg_id, new_content)
+        body = proto_min._fv(2, int(radio_id)) + proto_min._fs(3, msg_id) + proto_min._fb(4, inner)
+        self._send(0x3208, body)
+        ack = self._recv_ack_for(0x3209, msg_id)
+        return {"errcode": ack.get(5, 0)}
