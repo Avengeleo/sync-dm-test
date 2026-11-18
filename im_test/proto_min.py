@@ -521,3 +521,15 @@ def parse_chnn_msg_by_seq_resp(body):
     return {"code": _first_varint(top, 1), "msgs": msgs, "max_seq": _first_varint(top, 3),
             "min_seq": _first_varint(top, 4), "next_seq": _first_varint(top, 5),
             "has_more": bool(_first_varint(top, 6))}
+
+
+def parse_radio_deliver_seq(body):
+    """超级群下行 RadioChat,多解析 seq=17(消息漫游:普通消息、回应、系统通知推送携带)。"""
+    d = parse_radio_deliver(body)
+    d["seq"] = decode(body).get(17, 0)
+    return d
+
+
+def parse_chnn_msg_by_id_seqs(body):
+    """PullChnnMsgByIdRsp 中每条 ChnnChat 的 {msgId: seq}(ChnnChat.seq=18,迁移前老消息为 0)。"""
+    return {_s(decode(raw).get(3, b"")): decode(raw).get(18, 0) for raw in decode_all(body).get(2, [])}

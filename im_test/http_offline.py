@@ -130,3 +130,11 @@ class OfflineHttpClient:
         if r.status_code != 200:
             return r.status_code, None
         return 200, proto_min.parse_chnn_msg_by_seq_resp(r.content)
+
+    def channel_msg_by_id_seqs(self, chnn_id, msg_ids, client_type=0):
+        """按 msgId 回源,只取 {msgId: seq}。成功返回 (200, dict),失败 (HTTP 码, None)。"""
+        body = proto_min.chnn_msg_by_id_req(chnn_id, msg_ids, client_type=client_type)
+        r = self._post("/channel/v1/msg/by_id", body)
+        if r.status_code != 200:
+            return r.status_code, None
+        return 200, proto_min.parse_chnn_msg_by_id_seqs(r.content)
